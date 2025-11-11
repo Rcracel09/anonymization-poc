@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: anonymization-poc
+Version: 0.1.0
+Summary: Sistema de anonimização para E-Catalog LTPLabs
+Requires-Python: >=3.10
+Requires-Dist: spacy>=3.7.2
+Requires-Dist: faker>=20.1.0
+Requires-Dist: psycopg2-binary>=2.9.9
+Requires-Dist: pymongo>=4.6.0
+Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: pyyaml>=6.0.1
+Provides-Extra: dev
+Requires-Dist: pytest>=7.4.3; extra == "dev"
+Requires-Dist: pytest-cov>=4.1.0; extra == "dev"

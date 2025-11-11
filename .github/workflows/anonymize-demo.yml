@@ -1,0 +1,67 @@
+name: Anonimizar Demo
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_database:
+        description: 'Nome da BD original'
+        required: true
+        default: 'prod_app_db'
+
+jobs:
+  anonymize:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: demo_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Instalar dependências
+        run: |
+          pip install -r requirements.txt
+          python -m spacy download pt_core_news_lg
+      
+      - name: Criar .env
+        run: |
+          echo "POSTGRES_HOST=localhost" >> .env
+          echo "POSTGRES_PORT=5432" >> .env
+          echo "POSTGRES_DB=demo_db" >> .env
+          echo "POSTGRES_USER=postgres" >> .env
+          echo "POSTGRES_PASSWORD=postgres123" >> .env
+      
+      - name: Popular BD com dados de teste
+        run: |
+          PGPASSWORD=postgres123 psql -h localhost -U postgres -d demo_db -f docker/init-postgres.sql
+      
+      - name: 🔒 Executar anonimização
+        run: |
+          python scripts/anonymize_postgresql.py
+      
+      - name: Validar anonimização
+        run: |
+          pytest tests/test_anonymizer.py -v
+      
+      - name: Gerar relatório
+        run: |
+          echo "✅ Anonimização concluída!"
+          PGPASSWORD=postgres123 psql -h localhost -U postgres -d demo_db -c "SELECT COUNT(*) as total_users FROM users;"

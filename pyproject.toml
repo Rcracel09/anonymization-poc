@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "anonymization-poc"
+version = "0.1.0"
+description = "Sistema de anonimização para E-Catalog LTPLabs"
+requires-python = ">=3.10"
+dependencies = [
+    "spacy>=3.7.2",
+    "faker>=20.1.0",
+    "psycopg2-binary>=2.9.9",
+    "pymongo>=4.6.0",
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.3",
+    "pytest-cov>=4.1.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

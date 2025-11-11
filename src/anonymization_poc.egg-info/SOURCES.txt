@@ -1,0 +1,13 @@
+README.md
+pyproject.toml
+src/anonymization_poc.egg-info/PKG-INFO
+src/anonymization_poc.egg-info/SOURCES.txt
+src/anonymization_poc.egg-info/dependency_links.txt
+src/anonymization_poc.egg-info/requires.txt
+src/anonymization_poc.egg-info/top_level.txt
+src/scripts/__init__.py
+src/scripts/anonymize_mongodb.py
+src/scripts/anonymize_postgresql.py
+src/scripts/anonymizer.py
+tests/test_anonymizer.py
+tests/test_postgresql.py

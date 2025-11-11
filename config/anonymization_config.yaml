@@ -1,0 +1,33 @@
+postgresql:
+  tables:
+    users:
+      columns:
+        - name: "name"
+          type: "full_name"
+          strategy: "faker"
+        
+        - name: "email"
+          type: "email"
+          strategy: "faker"
+    
+    plans:
+      columns:
+        - name: "reviewed_by_name"
+          type: "full_name"
+          strategy: "faker"
+        
+        - name: "description"
+          type: "free_text"
+          strategy: "spacy"  # Usa NLP para detetar nomes
+
+mongodb:
+  collections:
+    plans:
+      fields:
+        - name: "metadata.reviewer"
+          type: "full_name"
+          strategy: "faker"
+        
+        - name: "notes"
+          type: "free_text"
+          strategy: "spacy"
