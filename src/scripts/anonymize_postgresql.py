@@ -5,8 +5,9 @@ Anonimização específica para PostgreSQL
 import os
 import psycopg2 # type: ignore
 import yaml
-from src.scripts.anonymizer import Anonymizer
+from .anonymizer import Anonymizer
 from dotenv import load_dotenv # type: ignore
+
 
 load_dotenv()
 

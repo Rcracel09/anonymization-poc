@@ -14,7 +14,8 @@ jobs:
     
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16env:
+  PYTHONPATH: ./src
         env:
           POSTGRES_DB: demo_db
           POSTGRES_USER: postgres
@@ -56,7 +57,7 @@ jobs:
       
       - name: 🔒 Executar anonimização
         run: |
-          python src/scripts/anonymize_postgresql.py
+          python -m scripts.anonymize_postgresql
       
       - name: Validar anonimização
         run: |
