@@ -14,8 +14,7 @@ jobs:
     
     services:
       postgres:
-        image: postgres:16env:
-  PYTHONPATH: ./src
+        image: postgres:16
         env:
           POSTGRES_DB: demo_db
           POSTGRES_USER: postgres
@@ -56,8 +55,7 @@ jobs:
           PGPASSWORD=postgres123 psql -h localhost -U postgres -d demo_db -f docker/init-postgres.sql
       
       - name: 🔒 Executar anonimização
-        run: |
-          python -m scripts.anonymize_postgresql
+        run: python -m scripts.anonymize_postgresql
       
       - name: Validar anonimização
         run: |
