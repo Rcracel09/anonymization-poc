@@ -56,7 +56,7 @@ jobs:
       
       - name: 🔒 Executar anonimização
         run: |
-          python scripts/anonymize_postgresql.py
+          python src/scripts/anonymize_postgresql.py
       
       - name: Validar anonimização
         run: |
