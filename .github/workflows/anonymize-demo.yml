@@ -55,7 +55,7 @@ jobs:
           PGPASSWORD=postgres123 psql -h localhost -U postgres -d demo_db -f docker/init-postgres.sql
       
       - name: 🔒 Executar anonimização
-        run: python -m scripts.anonymize_postgresql
+        run: python -m src.scripts.anonymize_postgresql
       
       - name: Validar anonimização
         run: |
