@@ -15,7 +15,7 @@ services:
       - ./init-postgres.sql:/docker-entrypoint-initdb.d/init.sql
 
   mongodb:
-    image: mongosh:1.8.0
+    image: mongo:7
     container_name: test_mongodb
     environment:
       MONGO_INITDB_ROOT_USERNAME: mongo
