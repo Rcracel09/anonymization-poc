@@ -5,7 +5,7 @@ Anonimização específica para MongoDB
 import os
 from pymongo import MongoClient # type: ignore
 import yaml
-from anonymizer import Anonymizer
+from .anonymizer import Anonymizer
 from dotenv import load_dotenv # type: ignore
 
 load_dotenv()
@@ -108,6 +108,6 @@ class MongoDBAnonymizer:
         self.client.close()
 
 if __name__ == "__main__":
-    anonymizer = MongoDBAnonymizer('config/anonymization_config.yaml')
+    anonymizer = MongoDBAnonymizer('anonymization_config.yaml')
     anonymizer.anonymize_all()
     anonymizer.close()

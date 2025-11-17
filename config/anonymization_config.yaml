@@ -22,12 +22,22 @@ postgresql:
 
 mongodb:
   collections:
-    plans:
+    users:
       fields:
-        - name: "metadata.reviewer"
+        - name: "name"
           type: "full_name"
           strategy: "faker"
         
-        - name: "notes"
+        - name: "email"
+          type: "email"
+          strategy: "faker"
+    
+    plans:
+      fields:
+        - name: "reviewed_by_name"
+          type: "full_name"
+          strategy: "faker"
+        
+        - name: "description"
           type: "free_text"
-          strategy: "spacy"
+          strategy: "spacy"  # Usa NLP para detetar nomes
