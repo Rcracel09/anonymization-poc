@@ -72,12 +72,12 @@ jobs:
       
       - name: Popular PostgreSQL com dados de teste
         run: |
-          PGPASSWORD=postgres123 psql -h localhost -U postgres -d demo_db -f init-postgres.sql
+          PGPASSWORD=postgres123 psql -h localhost -U postgres -d demo_db -f docker/init-postgres.sql
           echo "✅ PostgreSQL populado"
       
       - name: Popular MongoDB com dados de teste
         run: |
-          mongosh "mongodb://mongo:mongo123@localhost:27017/demo_db?authSource=admin" < init-mongo.js
+          mongosh "mongodb://mongo:mongo123@localhost:27017/demo_db?authSource=admin" < docker/init-mongo.js
           echo "✅ MongoDB populado"
       
       - name: 🔒 Executar anonimização PostgreSQL
