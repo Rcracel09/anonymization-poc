@@ -108,6 +108,6 @@ class MongoDBAnonymizer:
         self.client.close()
 
 if __name__ == "__main__":
-    anonymizer = MongoDBAnonymizer('src/scripts/anonymization_config.yaml')
+    anonymizer = MongoDBAnonymizer('anonymization_config.yaml')
     anonymizer.anonymize_all()
     anonymizer.close()
