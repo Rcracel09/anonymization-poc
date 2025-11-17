@@ -14,7 +14,6 @@ dependencies = [
     "pymongo>=4.6.0",
     "python-dotenv>=1.0.0",
     "pyyaml>=6.0.1",
-    "mongosh>=1.8.0",
 ]
 
 [project.optional-dependencies]
