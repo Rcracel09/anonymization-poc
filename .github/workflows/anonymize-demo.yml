@@ -69,7 +69,6 @@ jobs:
           echo "MONGO_DB=demo_db" >> .env
           echo "MONGO_USER=mongo" >> .env
           echo "MONGO_PASSWORD=mongo123" >> .env
-          EOF
       
       - name: Popular PostgreSQL com dados de teste
         run: |
