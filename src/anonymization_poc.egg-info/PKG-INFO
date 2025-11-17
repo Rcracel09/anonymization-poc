@@ -12,5 +12,3 @@ Requires-Dist: pyyaml>=6.0.1
 Provides-Extra: dev
 Requires-Dist: pytest>=7.4.3; extra == "dev"
 Requires-Dist: pytest-cov>=4.1.0; extra == "dev"
-Provides-Extra: mongo
-Requires-Dist: mongosh>=1.8.0; extra == "mongo"
