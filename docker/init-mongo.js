@@ -1,7 +1,7 @@
 // Script de inicialização do MongoDB
 // Dados idênticos ao PostgreSQL para testes de anonimização
 
-db = db.getSiblingDB('demo_db');
+db = db.getSiblingDB('demo_db2');
 
 // =======================
 // COLEÇÃO: users

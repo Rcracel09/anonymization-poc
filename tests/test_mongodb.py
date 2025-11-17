@@ -58,7 +58,7 @@ def populate_test_data():
         print(f"❌ Ficheiro {init_script} não encontrado!")
         sys.exit(1)
     
-    mongo_uri = "mongodb://mongo:mongo123@localhost:27017/demo_db?authSource=admin"
+    mongo_uri = "mongodb://mongo:mongo123@localhost:27017/demo_db2?authSource=admin"
     
     with open(init_script, 'r') as f:
         script_content = f.read()
@@ -88,7 +88,7 @@ def show_data_before():
     print_step(3, "Dados ANTES da anonimização:")
     print("=" * 40)
     
-    mongo_uri = "mongodb://mongo:mongo123@localhost:27017/demo_db?authSource=admin"
+    mongo_uri = "mongodb://mongo:mongo123@localhost:27017/demo_db2?authSource=admin"
     
     # Query para users
     query_users = """
@@ -150,7 +150,7 @@ def show_data_after():
     print_step(5, "Dados DEPOIS da anonimização:")
     print("=" * 40)
     
-    mongo_uri = "mongodb://mongo:mongo123@localhost:27017/demo_db?authSource=admin"
+    mongo_uri = "mongodb://mongo:mongo123@localhost:27017/demo_db2?authSource=admin"
     
     # Query para users
     query_users = """
