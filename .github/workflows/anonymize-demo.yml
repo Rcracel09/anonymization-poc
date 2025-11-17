@@ -55,7 +55,6 @@ jobs:
           pip install -r requirements.txt
           pip install -U spacy
           python -m spacy download pt_core_news_lg
-          pip install mongosh
       
       - name: Criar .env
         run: |
