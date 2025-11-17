@@ -75,6 +75,13 @@ jobs:
           PGPASSWORD=postgres123 psql -h localhost -U postgres -d demo_db -f docker/init-postgres.sql
           echo "✅ PostgreSQL populado"
       
+      - name: Instalar mongosh
+        run: |
+          wget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | sudo apt-key add -
+          echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+          sudo apt-get update
+          sudo apt-get install -y mongodb-mongosh
+
       - name: Popular MongoDB com dados de teste
         run: |
           mongosh "mongodb://mongo:mongo123@localhost:27017/demo_db2?authSource=admin" < docker/init-mongo.js
