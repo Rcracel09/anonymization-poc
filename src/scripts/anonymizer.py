@@ -251,17 +251,33 @@ class Anonymizer:
         """
         # Lista de palavras comuns que podem estar capitalizadas
         common_words = {
-            'Article', 'The', 'And', 'Or', 'But', 'In', 'On', 'At', 'To', 'For',
-            'Contact', 'Email', 'Phone', 'Address', 'Dear', 'Hello', 'Regards',
+            # Artigos e preposições comuns
+            'Article', 'The', 'And', 'Or', 'But', 'In', 'On', 'At', 'To', 'For', 'By', 'With',
+            # Palavras que aparecem antes de nomes (contexto)
+            'Contact', 'Email', 'Phone', 'Address', 'Dear', 'Hello', 'Regards', 'From',
+            'Mr', 'Mrs', 'Ms', 'Dr', 'Prof', 'Sir', 'Madam',
+            # Dias da semana
             'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+            # Meses
             'January', 'February', 'March', 'April', 'May', 'June', 'July', 
             'August', 'September', 'October', 'November', 'December',
-            'Portugal', 'Lisboa', 'Porto', 'Brazil', 'English', 'Portuguese'
+            # Locais conhecidos (não pessoas)
+            'Portugal', 'Lisboa', 'Porto', 'Coimbra', 'Brazil', 'Brasília',
+            'Spain', 'Madrid', 'France', 'Paris', 'England', 'London',
+            # Línguas
+            'English', 'Portuguese', 'Spanish', 'French',
+            # Outras palavras comuns
+            'Company', 'Corporation', 'Limited', 'Inc', 'Ltd', 'Group'
         }
         
-        # Verificar se todas as palavras são comuns
+        # Verificar se QUALQUER palavra é comum (não precisa ser todas)
+        # Isso previne "Contact João" de ser considerado um nome
         words = text.split()
-        return all(word in common_words for word in words)
+        for word in words:
+            if word in common_words:
+                return True
+        
+        return False
     
     def get_statistics(self) -> Dict:
         """
