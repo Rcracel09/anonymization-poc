@@ -184,18 +184,33 @@ class Anonymizer:
         for email_match in self.email_pattern.finditer(text_str):
             email_matches.append((email_match.start(), email_match.end(), email_match.group()))
         
+        # DEBUG: mostrar emails encontrados
+        if email_matches:
+            print(f"DEBUG: Encontrados {len(email_matches)} emails:")
+            for start, end, email in email_matches:
+                print(f"  - '{email}' na posição {start}-{end}")
+        
         # Processar emails de trás para frente para não quebrar offsets
         anonymized_text = text_str
         for start, end, original_email in reversed(email_matches):
             anonymized_email = self.anonymize_email(original_email)
+            print(f"DEBUG: Substituindo email '{original_email}' → '{anonymized_email}'")
+            print(f"DEBUG: Texto antes: '{anonymized_text}'")
             anonymized_text = (
                 anonymized_text[:start] +
                 anonymized_email +
                 anonymized_text[end:]
             )
+            print(f"DEBUG: Texto depois: '{anonymized_text}'")
+        
         
         # Depois, usar spaCy para nomes
         doc = self.nlp(anonymized_text)
+        
+        # DEBUG: mostrar o que spaCy detectou
+        print(f"\nDEBUG: spaCy detectou {len(doc.ents)} entidades:")
+        for ent in doc.ents:
+            print(f"  - '{ent.text}' ({ent.label_}) na posição {ent.start_char}-{ent.end_char}")
         
         # Coletar nomes já detectados pelo spaCy
         detected_names = set()
@@ -207,6 +222,9 @@ class Anonymizer:
                 original = ent.text
                 anonymized = self.anonymize_name(original)
                 
+                print(f"DEBUG: Substituindo nome spaCy '{original}' → '{anonymized}' pos {ent.start_char}-{ent.end_char}")
+                print(f"DEBUG: Texto antes: '{anonymized_text}'")
+                
                 # Substituir no texto
                 start = ent.start_char
                 end = ent.end_char
@@ -215,33 +233,55 @@ class Anonymizer:
                     anonymized + 
                     anonymized_text[end:]
                 )
+                
+                print(f"DEBUG: Texto depois: '{anonymized_text}'")
+        
         
         # Fallback: usar regex para encontrar nomes que o spaCy perdeu
         # Padrão: 2-4 palavras capitalizadas (nomes portugueses e ingleses)
         name_pattern = re.compile(r'\b[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+(?:\s+[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+){1,3}\b')
         
+        print(f"\nDEBUG: Procurando nomes com fallback regex...")
+        
         # Encontrar todos os potenciais nomes
         potential_names = []
         for match in name_pattern.finditer(anonymized_text):
             potential_name = match.group()
+            
+            in_detected = potential_name in detected_names
+            looks_like = self._looks_like_name(potential_name)
+            is_common = self._is_common_word(potential_name)
+            will_process = in_detected == False and looks_like and not is_common
+            
+            print(f"DEBUG: Regex encontrou '{potential_name}' pos {match.start()}-{match.end()}")
+            print(f"  • Já detectado? {in_detected}")
+            print(f"  • Parece nome? {looks_like}")
+            print(f"  • Palavra comum? {is_common}")
+            print(f"  • Vai processar? {will_process}")
+            
             # Só processar se:
             # 1. spaCy não detectou
             # 2. Parece um nome (heurística)
             # 3. Não é uma palavra comum
-            if (potential_name not in detected_names and 
-                self._looks_like_name(potential_name) and
-                not self._is_common_word(potential_name)):
+            if will_process:
                 potential_names.append((match.start(), match.end(), potential_name))
         
         # Processar de trás para frente para não quebrar offsets
+        if potential_names:
+            print(f"\nDEBUG: Processando {len(potential_names)} nomes pelo fallback...")
         for start, end, potential_name in reversed(potential_names):
             anonymized_name = self.anonymize_name(potential_name)
+            print(f"DEBUG: Substituindo fallback '{potential_name}' → '{anonymized_name}' pos {start}-{end}")
+            print(f"DEBUG: Texto antes: '{anonymized_text}'")
             # Usar offsets em vez de replace() para evitar substituições indesejadas
             anonymized_text = (
                 anonymized_text[:start] + 
                 anonymized_name + 
                 anonymized_text[end:]
             )
+            print(f"DEBUG: Texto depois: '{anonymized_text}'")
+        
+        print(f"\nDEBUG: Texto final: '{anonymized_text}'")
         
         return anonymized_text
     
