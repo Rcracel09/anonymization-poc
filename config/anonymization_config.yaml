@@ -18,26 +18,4 @@ postgresql:
         
         - name: "description"
           type: "free_text"
-          strategy: "spacy"  # Usa NLP para detetar nomes
-
-mongodb:
-  collections:
-    users:
-      fields:
-        - name: "name"
-          type: "full_name"
-          strategy: "faker"
-        
-        - name: "email"
-          type: "email"
-          strategy: "faker"
-    
-    plans:
-      fields:
-        - name: "reviewed_by_name"
-          type: "full_name"
-          strategy: "faker"
-        
-        - name: "description"
-          type: "free_text"
-          strategy: "spacy"  # Usa NLP para detetar nomes
+          strategy: "spacy"  

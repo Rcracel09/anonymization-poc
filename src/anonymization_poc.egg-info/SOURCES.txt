@@ -11,3 +11,5 @@ src/scripts/anonymize_postgresql.py
 src/scripts/anonymizer.py
 tests/test_anonymizer.py
 tests/test_postgresql.py
+tests/test_mongodb.py
+tests/test_auto_detection.py
