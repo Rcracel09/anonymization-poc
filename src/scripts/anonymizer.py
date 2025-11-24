@@ -60,11 +60,15 @@ class Anonymizer:
         """
         Detecta se uma coluna contém nomes de pessoas
         """
+        # Verificar nome da coluna
+        column_lower = column_name.lower()
+        if any(keyword in column_lower for keyword in self.name_keywords):
+            return True
         
         # Usar spaCy para analisar valores de amostra
         if sample_values:
             person_count = 0
-            for val in sample_values[:10]:  
+            for val in sample_values[:10]:  # Limitar análise a 10 valores
                 if not val or not isinstance(val, str):
                     continue
                 
@@ -76,20 +80,14 @@ class Anonymizer:
                         if ent.label_ == "PER":
                             person_count += 1
                             break
-                        
-                # No caso de nao encontrar entidade, usar heurística simples
+                # Ou se contém palavras capitalizadas típicas de nomes
                 elif self._looks_like_name(val):
                     person_count += 1
             
             # Se >40% parecem nomes, é uma coluna de nome
-            flag = person_count / min(len(sample_values), 10) > 0.4
+            return person_count / min(len(sample_values), 10) > 0.4
         
-        # Verificar nome da coluna
-        column_lower = column_name.lower()
-        if any(keyword in column_lower for keyword in self.name_keywords):
-            return True and flag
-
-        return flag
+        return False
     
     def _looks_like_name(self, text: str) -> bool:
         """
@@ -118,7 +116,7 @@ class Anonymizer:
         print("\n🔍 Detectando colunas com PII...")
         
         for column_name, sample_values in column_samples.items():
-            # Filtrar valores NULL
+            # Filtrar valores None/NULL
             sample_values = [v for v in sample_values if v is not None]
             
             if not sample_values:
@@ -185,9 +183,13 @@ class Anonymizer:
         # Depois, usar spaCy para nomes
         doc = self.nlp(anonymized_text)
         
+        # Coletar nomes já detectados pelo spaCy
+        detected_names = set()
+        
         # Processar entidades de trás para frente para não quebrar offsets
         for ent in reversed(doc.ents):
-            if ent.label_ == "PER":  
+            if ent.label_ == "PER":  # Nome de pessoa
+                detected_names.add(ent.text)
                 original = ent.text
                 anonymized = self.anonymize_name(original)
                 
@@ -200,9 +202,56 @@ class Anonymizer:
                     anonymized_text[end:]
                 )
         
+        # Fallback: usar regex para encontrar nomes que o spaCy perdeu
+        # Padrão: 2-4 palavras capitalizadas (nomes portugueses e ingleses)
+        name_pattern = re.compile(r'\b[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+(?:\s+[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+){1,3}\b')
+        
+        # Encontrar todos os potenciais nomes
+        potential_names = []
+        for match in name_pattern.finditer(anonymized_text):
+            potential_name = match.group()
+            # Só processar se:
+            # 1. spaCy não detectou
+            # 2. Parece um nome (heurística)
+            # 3. Não é uma palavra comum
+            if (potential_name not in detected_names and 
+                self._looks_like_name(potential_name) and
+                not self._is_common_word(potential_name)):
+                potential_names.append((match.start(), match.end(), potential_name))
+        
+        # Processar de trás para frente para não quebrar offsets
+        for start, end, potential_name in reversed(potential_names):
+            anonymized_name = self.anonymize_name(potential_name)
+            anonymized_text = (
+                anonymized_text[:start] + 
+                anonymized_name + 
+                anonymized_text[end:]
+            )
+        
         return anonymized_text
     
+    def _is_common_word(self, text: str) -> bool:
+        """
+        Verifica se é uma palavra comum (não é nome)
+        """
+        # Lista de palavras comuns que podem estar capitalizadas
+        common_words = {
+            'Article', 'The', 'And', 'Or', 'But', 'In', 'On', 'At', 'To', 'For',
+            'Contact', 'Email', 'Phone', 'Address', 'Dear', 'Hello', 'Regards',
+            'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+            'January', 'February', 'March', 'April', 'May', 'June', 'July', 
+            'August', 'September', 'October', 'November', 'December',
+            'Portugal', 'Lisboa', 'Porto', 'Brazil', 'English', 'Portuguese'
+        }
+        
+        # Verificar se todas as palavras são comuns
+        words = text.split()
+        return all(word in common_words for word in words)
+    
     def get_statistics(self) -> Dict:
+        """
+        Retorna estatísticas da anonimização
+        """
         return {
             'total_names_anonymized': len(self.name_mapping),
             'total_emails_anonymized': len(self.email_mapping),
