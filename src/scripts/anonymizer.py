@@ -98,7 +98,12 @@ class Anonymizer:
         
         # Nome típico: 2-4 palavras capitalizadas
         words = text.split()
-        if len(words) > 5 or len(words) == 0:
+        
+        # Deve ter pelo menos 2 palavras para ser considerado um nome
+        if len(words) < 2:
+            return False
+            
+        if len(words) > 5:
             return False
         
         capitalized_words = sum(1 for w in words if w and w[0].isupper())
@@ -174,11 +179,20 @@ class Anonymizer:
         text_str = str(text)
         
         # Primeiro, anonimizar emails com regex
-        anonymized_text = text_str
+        # Coletar todos os emails para processar de trás para frente
+        email_matches = []
         for email_match in self.email_pattern.finditer(text_str):
-            original_email = email_match.group()
+            email_matches.append((email_match.start(), email_match.end(), email_match.group()))
+        
+        # Processar emails de trás para frente para não quebrar offsets
+        anonymized_text = text_str
+        for start, end, original_email in reversed(email_matches):
             anonymized_email = self.anonymize_email(original_email)
-            anonymized_text = anonymized_text.replace(original_email, anonymized_email)
+            anonymized_text = (
+                anonymized_text[:start] +
+                anonymized_email +
+                anonymized_text[end:]
+            )
         
         # Depois, usar spaCy para nomes
         doc = self.nlp(anonymized_text)
@@ -222,6 +236,7 @@ class Anonymizer:
         # Processar de trás para frente para não quebrar offsets
         for start, end, potential_name in reversed(potential_names):
             anonymized_name = self.anonymize_name(potential_name)
+            # Usar offsets em vez de replace() para evitar substituições indesejadas
             anonymized_text = (
                 anonymized_text[:start] + 
                 anonymized_name + 
