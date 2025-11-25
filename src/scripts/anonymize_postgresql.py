@@ -206,6 +206,26 @@ class PostgreSQLAnonymizer:
         
         return processed
     
+    def print_db_to_txt(self):
+        print("\n📝 Exportando conteúdo da base de dados para ficheiros TXT...")
+        
+        tables = self.get_all_tables()
+        
+        for table_name in tables:
+            self.cursor.execute(f"SELECT * FROM {table_name}")
+            rows = self.cursor.fetchall()
+            columns = [desc[0] for desc in self.cursor.description]
+            
+            with open(f"{table_name}_export.txt", "w", encoding="utf-8") as f:
+                # Escrever cabeçalho
+                f.write("\t".join(columns) + "\n")
+                
+                # Escrever linhas
+                for row in rows:
+                    f.write("\t".join([str(item) if item is not None else "" for item in row]) + "\n")
+            
+            print(f"   ✓ Exportado {table_name}_export.txt")
+    
     def close(self):
         self.cursor.close()
         self.conn.close()
@@ -214,4 +234,5 @@ if __name__ == "__main__":
     anonymizer = PostgreSQLAnonymizer()
     anonymizer.anonymize_all()
     anonymizer.anonymize_text_columns()
+    anonymizer.print_db_to_txt()
     anonymizer.close()
