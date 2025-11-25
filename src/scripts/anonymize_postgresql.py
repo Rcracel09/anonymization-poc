@@ -232,5 +232,5 @@ if __name__ == "__main__":
     anonymizer = PostgreSQLAnonymizer()
     anonymizer.anonymize_all()
     anonymizer.anonymize_text_columns()
-    anonymizer.print_db_to_txt()
+    anonymizer.print_db()
     anonymizer.close()
