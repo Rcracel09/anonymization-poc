@@ -68,13 +68,7 @@ class Anonymizer:
                             'item', 'project', 'projeto', 'description', 'descricao',
                             'content', 'conteudo', 'text', 'texto', 'note', 'nota',
                             'observation', 'observacao', 'review']
-        if any(keyword in column_lower for keyword in excluded_keywords):
-            return False
-        
-        # Verificar se contém keywords de nome
-        if any(keyword in column_lower for keyword in self.name_keywords):
-            return True
-        
+        flag = False
         # Usar spaCy para analisar valores de amostra
         if sample_values:
             person_count = 0
@@ -99,9 +93,16 @@ class Anonymizer:
                     person_count += 1
             
             # Se >40% parecem nomes, é uma coluna de nome
-            return person_count / min(len(sample_values), 10) > 0.4
+            flag = person_count / min(len(sample_values), 10) > 0.4
         
-        return False
+        if any(keyword in column_lower for keyword in excluded_keywords):
+            return False 
+        
+        # Verificar se contém keywords de nome
+        if any(keyword in column_lower for keyword in self.name_keywords):
+            return True and flag
+        
+        return False or flag   
     
     def _looks_like_name(self, text: str) -> bool:
         """
