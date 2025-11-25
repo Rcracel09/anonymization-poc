@@ -218,6 +218,44 @@ class Anonymizer:
         # Processar entidades de trás para frente para não quebrar offsets
         for ent in reversed(doc.ents):
             if ent.label_ == "PER":  # Nome de pessoa
+                # IMPORTANTE: Ignorar entidades que contêm @ (email)
+                # spaCy às vezes detecta "Nome at email@domain.com" como uma única entidade
+                if '@' in ent.text:
+                    print(f"DEBUG: Entidade contém '@', processando apenas o nome: '{ent.text}'")
+                    # Tentar extrair apenas o nome (antes de "at" ou antes do @)
+                    # Padrão: "João Silva at email@domain.com" → queremos apenas "João Silva"
+                    
+                    # Procurar " at " como separador
+                    if ' at ' in ent.text:
+                        name_part = ent.text.split(' at ')[0].strip()
+                    elif ' em ' in ent.text:  # Português
+                        name_part = ent.text.split(' em ')[0].strip()
+                    else:
+                        # Fallback: pegar tudo antes do primeiro @
+                        name_part = ent.text.split('@')[0].strip()
+                        # Remover possível "at" ou "em" do final
+                        name_part = name_part.rstrip('at ').rstrip('em ').strip()
+                    
+                    if name_part and len(name_part) > 2:
+                        detected_names.add(name_part)
+                        anonymized_name = self.anonymize_name(name_part)
+                        
+                        # Calcular offsets corretos para a parte do nome
+                        name_start = ent.start_char
+                        name_end = ent.start_char + len(name_part)
+                        
+                        print(f"DEBUG: Substituindo parte do nome '{name_part}' → '{anonymized_name}' pos {name_start}-{name_end}")
+                        print(f"DEBUG: Texto antes: '{anonymized_text}'")
+                        
+                        anonymized_text = (
+                            anonymized_text[:name_start] +
+                            anonymized_name +
+                            anonymized_text[name_end:]
+                        )
+                        
+                        print(f"DEBUG: Texto depois: '{anonymized_text}'")
+                    continue
+                
                 detected_names.add(ent.text)
                 original = ent.text
                 anonymized = self.anonymize_name(original)
