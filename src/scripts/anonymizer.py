@@ -36,7 +36,7 @@ class Anonymizer:
             'owner', 'proprietario', 'user', 'usuario',
             'reviewer', 'revisor', 'approver', 'aprovador',
             'contact', 'contato', 'person', 'pessoa',
-            'client', 'cliente', 'customer'
+            'client', 'cliente', 'customer', 'assigned'
         ]
     
     def is_email_column(self, column_name: str, sample_values: List[str]) -> bool:
@@ -62,6 +62,16 @@ class Anonymizer:
         """
         # Verificar nome da coluna
         column_lower = column_name.lower()
+        
+        # Excluir colunas que claramente NÃO são nomes de pessoas
+        excluded_keywords = ['title', 'titulo', 'subject', 'assunto', 'product', 'produto', 
+                            'item', 'project', 'projeto', 'description', 'descricao',
+                            'content', 'conteudo', 'text', 'texto', 'note', 'nota',
+                            'observation', 'observacao', 'review']
+        if any(keyword in column_lower for keyword in excluded_keywords):
+            return False
+        
+        # Verificar se contém keywords de nome
         if any(keyword in column_lower for keyword in self.name_keywords):
             return True
         
@@ -70,6 +80,10 @@ class Anonymizer:
             person_count = 0
             for val in sample_values[:10]:  # Limitar análise a 10 valores
                 if not val or not isinstance(val, str):
+                    continue
+                
+                # Se valor é muito longo (>150 chars), provavelmente não é só um nome
+                if len(val) > 150:
                     continue
                 
                 doc = self.nlp(val.strip())
@@ -94,6 +108,10 @@ class Anonymizer:
         Verifica se um texto parece um nome (heurística simples)
         """
         if not text or len(text) < 3:
+            return False
+        
+        # Se é muito longo, provavelmente não é apenas um nome
+        if len(text) > 150:
             return False
         
         # Nome típico: 2-4 palavras capitalizadas
@@ -157,21 +175,57 @@ class Anonymizer:
     
     def anonymize_email(self, original_email: str) -> str:
         """
-        Anonimiza um email
+        Anonimiza um email, garantindo formato válido (sem espaços)
         """
         if not original_email or '@' not in str(original_email):
             return original_email
         
-        email_str = str(original_email)
+        email_str = str(original_email).strip()
         
         if email_str not in self.email_mapping:
-            self.email_mapping[email_str] = self.fake.email()
+            # Gerar email válido
+            fake_email = self.fake.email()
+            
+            # Garantir que não há espaços, acentos ou caracteres especiais no email
+            # Remover espaços
+            fake_email = fake_email.replace(' ', '')
+            
+            # Remover acentos e caracteres especiais antes do @
+            if '@' in fake_email:
+                local_part, domain = fake_email.split('@', 1)
+                
+                # Substituir acentos e caracteres especiais
+                replacements = {
+                    'á': 'a', 'à': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a',
+                    'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
+                    'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
+                    'ó': 'o', 'ò': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o',
+                    'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
+                    'ç': 'c', 'ñ': 'n',
+                    'Á': 'A', 'À': 'A', 'Â': 'A', 'Ã': 'A', 'Ä': 'A',
+                    'É': 'E', 'È': 'E', 'Ê': 'E', 'Ë': 'E',
+                    'Í': 'I', 'Ì': 'I', 'Î': 'I', 'Ï': 'I',
+                    'Ó': 'O', 'Ò': 'O', 'Ô': 'O', 'Õ': 'O', 'Ö': 'O',
+                    'Ú': 'U', 'Ù': 'U', 'Û': 'U', 'Ü': 'U',
+                    'Ç': 'C', 'Ñ': 'N'
+                }
+                
+                for old_char, new_char in replacements.items():
+                    local_part = local_part.replace(old_char, new_char)
+                
+                # Remover hífens e tornar minúsculo
+                local_part = local_part.replace('-', '').lower()
+                
+                fake_email = f"{local_part}@{domain}"
+            
+            self.email_mapping[email_str] = fake_email
         
         return self.email_mapping[email_str]
     
     def anonymize_text(self, text: str) -> str:
         """
         Usa spaCy para detectar e anonimizar nomes e emails em texto livre
+        Preserva o contexto e estrutura do texto
         """
         if not text or str(text).strip() == "":
             return text
@@ -179,38 +233,22 @@ class Anonymizer:
         text_str = str(text)
         
         # Primeiro, anonimizar emails com regex
-        # Coletar todos os emails para processar de trás para frente
         email_matches = []
         for email_match in self.email_pattern.finditer(text_str):
             email_matches.append((email_match.start(), email_match.end(), email_match.group()))
-        
-        # DEBUG: mostrar emails encontrados
-        if email_matches:
-            print(f"DEBUG: Encontrados {len(email_matches)} emails:")
-            for start, end, email in email_matches:
-                print(f"  - '{email}' na posição {start}-{end}")
         
         # Processar emails de trás para frente para não quebrar offsets
         anonymized_text = text_str
         for start, end, original_email in reversed(email_matches):
             anonymized_email = self.anonymize_email(original_email)
-            print(f"DEBUG: Substituindo email '{original_email}' → '{anonymized_email}'")
-            print(f"DEBUG: Texto antes: '{anonymized_text}'")
             anonymized_text = (
                 anonymized_text[:start] +
                 anonymized_email +
                 anonymized_text[end:]
             )
-            print(f"DEBUG: Texto depois: '{anonymized_text}'")
-        
         
         # Depois, usar spaCy para nomes
         doc = self.nlp(anonymized_text)
-        
-        # DEBUG: mostrar o que spaCy detectou
-        print(f"\nDEBUG: spaCy detectou {len(doc.ents)} entidades:")
-        for ent in doc.ents:
-            print(f"  - '{ent.text}' ({ent.label_}) na posição {ent.start_char}-{ent.end_char}")
         
         # Coletar nomes já detectados pelo spaCy
         detected_names = set()
@@ -221,11 +259,7 @@ class Anonymizer:
                 # IMPORTANTE: Ignorar entidades que contêm @ (email)
                 # spaCy às vezes detecta "Nome at email@domain.com" como uma única entidade
                 if '@' in ent.text:
-                    print(f"DEBUG: Entidade contém '@', processando apenas o nome: '{ent.text}'")
-                    # Tentar extrair apenas o nome (antes de "at" ou antes do @)
-                    # Padrão: "João Silva at email@domain.com" → queremos apenas "João Silva"
-                    
-                    # Procurar " at " como separador
+                    # Tentar extrair apenas o nome (antes de "at" ou "em")
                     if ' at ' in ent.text:
                         name_part = ent.text.split(' at ')[0].strip()
                     elif ' em ' in ent.text:  # Português
@@ -240,28 +274,20 @@ class Anonymizer:
                         detected_names.add(name_part)
                         anonymized_name = self.anonymize_name(name_part)
                         
-                        # Calcular offsets corretos para a parte do nome
+                        # Calcular offsets corretos
                         name_start = ent.start_char
                         name_end = ent.start_char + len(name_part)
-                        
-                        print(f"DEBUG: Substituindo parte do nome '{name_part}' → '{anonymized_name}' pos {name_start}-{name_end}")
-                        print(f"DEBUG: Texto antes: '{anonymized_text}'")
                         
                         anonymized_text = (
                             anonymized_text[:name_start] +
                             anonymized_name +
                             anonymized_text[name_end:]
                         )
-                        
-                        print(f"DEBUG: Texto depois: '{anonymized_text}'")
                     continue
                 
                 detected_names.add(ent.text)
                 original = ent.text
                 anonymized = self.anonymize_name(original)
-                
-                print(f"DEBUG: Substituindo nome spaCy '{original}' → '{anonymized}' pos {ent.start_char}-{ent.end_char}")
-                print(f"DEBUG: Texto antes: '{anonymized_text}'")
                 
                 # Substituir no texto
                 start = ent.start_char
@@ -271,55 +297,29 @@ class Anonymizer:
                     anonymized + 
                     anonymized_text[end:]
                 )
-                
-                print(f"DEBUG: Texto depois: '{anonymized_text}'")
-        
         
         # Fallback: usar regex para encontrar nomes que o spaCy perdeu
-        # Padrão: 2-4 palavras capitalizadas (nomes portugueses e ingleses)
         name_pattern = re.compile(r'\b[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+(?:\s+[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+){1,3}\b')
-        
-        print(f"\nDEBUG: Procurando nomes com fallback regex...")
         
         # Encontrar todos os potenciais nomes
         potential_names = []
         for match in name_pattern.finditer(anonymized_text):
             potential_name = match.group()
             
-            in_detected = potential_name in detected_names
-            looks_like = self._looks_like_name(potential_name)
-            is_common = self._is_common_word(potential_name)
-            will_process = in_detected == False and looks_like and not is_common
-            
-            print(f"DEBUG: Regex encontrou '{potential_name}' pos {match.start()}-{match.end()}")
-            print(f"  • Já detectado? {in_detected}")
-            print(f"  • Parece nome? {looks_like}")
-            print(f"  • Palavra comum? {is_common}")
-            print(f"  • Vai processar? {will_process}")
-            
-            # Só processar se:
-            # 1. spaCy não detectou
-            # 2. Parece um nome (heurística)
-            # 3. Não é uma palavra comum
-            if will_process:
+            # Só processar se spaCy não detectou, parece nome e não é palavra comum
+            if (potential_name not in detected_names and 
+                self._looks_like_name(potential_name) and
+                not self._is_common_word(potential_name)):
                 potential_names.append((match.start(), match.end(), potential_name))
         
-        # Processar de trás para frente para não quebrar offsets
-        if potential_names:
-            print(f"\nDEBUG: Processando {len(potential_names)} nomes pelo fallback...")
+        # Processar de trás para frente
         for start, end, potential_name in reversed(potential_names):
             anonymized_name = self.anonymize_name(potential_name)
-            print(f"DEBUG: Substituindo fallback '{potential_name}' → '{anonymized_name}' pos {start}-{end}")
-            print(f"DEBUG: Texto antes: '{anonymized_text}'")
-            # Usar offsets em vez de replace() para evitar substituições indesejadas
             anonymized_text = (
                 anonymized_text[:start] + 
                 anonymized_name + 
                 anonymized_text[end:]
             )
-            print(f"DEBUG: Texto depois: '{anonymized_text}'")
-        
-        print(f"\nDEBUG: Texto final: '{anonymized_text}'")
         
         return anonymized_text
     
@@ -329,27 +329,24 @@ class Anonymizer:
         """
         # Lista de palavras comuns que podem estar capitalizadas
         common_words = {
-            # Artigos e preposições comuns
+            # Artigos e preposições
             'Article', 'The', 'And', 'Or', 'But', 'In', 'On', 'At', 'To', 'For', 'By', 'With',
-            # Palavras que aparecem antes de nomes (contexto)
+            # Contexto
             'Contact', 'Email', 'Phone', 'Address', 'Dear', 'Hello', 'Regards', 'From',
-            'Mr', 'Mrs', 'Ms', 'Dr', 'Prof', 'Sir', 'Madam',
-            # Dias da semana
+            'Mr', 'Mrs', 'Ms', 'Dr', 'Prof', 'Sir', 'Madam', 'User', 'Customer', 'Client',
+            # Dias e meses
             'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
-            # Meses
             'January', 'February', 'March', 'April', 'May', 'June', 'July', 
             'August', 'September', 'October', 'November', 'December',
-            # Locais conhecidos (não pessoas)
+            # Locais
             'Portugal', 'Lisboa', 'Porto', 'Coimbra', 'Brazil', 'Brasília',
             'Spain', 'Madrid', 'France', 'Paris', 'England', 'London',
-            # Línguas
+            # Línguas e outros
             'English', 'Portuguese', 'Spanish', 'French',
-            # Outras palavras comuns
             'Company', 'Corporation', 'Limited', 'Inc', 'Ltd', 'Group'
         }
         
-        # Verificar se QUALQUER palavra é comum (não precisa ser todas)
-        # Isso previne "Contact João" de ser considerado um nome
+        # Verificar se QUALQUER palavra é comum
         words = text.split()
         for word in words:
             if word in common_words:

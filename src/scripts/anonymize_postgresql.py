@@ -122,6 +122,16 @@ class PostgreSQLAnonymizer:
         """
         Anonimiza uma coluna específica
         """
+        # Verificar o tipo de dados da coluna
+        self.cursor.execute("""
+            SELECT data_type 
+            FROM information_schema.columns 
+            WHERE table_name = %s AND column_name = %s
+        """, (table_name, column_name))
+        
+        result = self.cursor.fetchone()
+        column_type = result[0] if result else None
+        
         # Buscar todos os valores
         self.cursor.execute(
             f"SELECT id, {column_name} FROM {table_name} WHERE {column_name} IS NOT NULL"
@@ -130,13 +140,18 @@ class PostgreSQLAnonymizer:
         rows = self.cursor.fetchall()
         
         for row_id, original_value in rows:
-            # Aplicar estratégia de anonimização
-            if pii_type == 'name':
-                new_value = self.anonymizer.anonymize_name(original_value)
-            elif pii_type == 'email':
-                new_value = self.anonymizer.anonymize_email(original_value)
+            # Se é campo TEXT e tem mais de 100 chars, provavelmente é texto livre
+            # Usar anonymize_text() para preservar contexto
+            if column_type == 'text' and len(str(original_value)) > 100:
+                new_value = self.anonymizer.anonymize_text(original_value)
             else:
-                continue
+                # Aplicar estratégia de anonimização normal
+                if pii_type == 'name':
+                    new_value = self.anonymizer.anonymize_name(original_value)
+                elif pii_type == 'email':
+                    new_value = self.anonymizer.anonymize_email(original_value)
+                else:
+                    continue
             
             # Update na BD
             self.cursor.execute(
@@ -206,6 +221,10 @@ class PostgreSQLAnonymizer:
         
         return processed
     
+    def close(self):
+        self.cursor.close()
+        self.conn.close()
+        
     def print_db(self):
         """
         Da print do conteúdo da base de dados no terminal
@@ -224,9 +243,6 @@ class PostgreSQLAnonymizer:
             for row in rows:
                 print(f"   {row}")
     
-    def close(self):
-        self.cursor.close()
-        self.conn.close()
 
 if __name__ == "__main__":
     anonymizer = PostgreSQLAnonymizer()
