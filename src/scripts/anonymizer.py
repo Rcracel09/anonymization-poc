@@ -289,9 +289,9 @@ class Anonymizer:
         if phone_str not in self.phone_mapping:
             # Detectar formato do telefone original
             has_country_code = phone_str.startswith('+')
-            has_parentheses = '(' in phone_str and ')' in phone_str
             has_spaces = ' ' in phone_str
             has_dashes = '-' in phone_str
+            not_spaces = not has_spaces and not has_dashes
             
             # Gerar número fake baseado no locale
             fake_phone = self.fake.phone_number()
@@ -307,18 +307,10 @@ class Anonymizer:
                     clean_fake += str(self.fake.random_digit())
             
             # Aplicar formatação similar ao original
-            if has_parentheses:
-                # Formato: (XX) XXXXX-XXXX ou +XX (XX) XXXXX-XXXX
-                if has_country_code:
-                    if len(clean_fake) >= 12:
-                        formatted = f"+{clean_fake[:2]} ({clean_fake[2:4]}) {clean_fake[4:9]}-{clean_fake[9:13]}"
-                    else:
-                        formatted = f"+{clean_fake[:2]} ({clean_fake[2:4]}) {clean_fake[4:]}"
-                else:
-                    if len(clean_fake) >= 11:
-                        formatted = f"({clean_fake[:2]}) {clean_fake[2:7]}-{clean_fake[7:11]}"
-                    else:
-                        formatted = f"({clean_fake[:2]}) {clean_fake[2:]}"
+            if not_spaces:
+                # Formato simples sem espaços ou hífens: +351912345678 ou 912345678
+                formatted = clean_fake
+                
             elif has_spaces:
                 # Formato com espaços: +351 912 345 678
                 if has_country_code:
@@ -434,6 +426,7 @@ class Anonymizer:
             'Contact', 'Email', 'Phone', 'Address', 'Dear', 'Hello', 'Regards', 'From',
             'Mr', 'Mrs', 'Ms', 'Dr', 'Prof', 'Sir', 'Madam', 'User', 'Customer', 'Client',
             'Assigned', 'Support', 'Agent', 'Reported', 'Issues', 'Regarding', 'Contacted','Contact',
+            'Call',
             # Dias e meses
             'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
             'January', 'February', 'March', 'April', 'May', 'June', 'July', 

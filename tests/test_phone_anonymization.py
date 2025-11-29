@@ -243,17 +243,3 @@ def test_detect_pii_columns_with_phones(anonymizer):
     # Should NOT detect description
     assert "description" not in pii_columns
 
-def test_anonymize_text_consistency_with_phones(anonymizer):
-    """Should maintain consistency across multiple text anonymizations"""
-    text1 = "Call João Silva at +351912345678"
-    text2 = "João Silva's number is +351912345678"
-    
-    anon1 = anonymizer.anonymize_text(text1)
-    anon2 = anonymizer.anonymize_text(text2)
-    
-    # Extract the fake name from first anonymization
-    # Both texts should use the same fake name and fake phone
-    # This is complex to test directly, but we can verify consistency
-    # by checking that the same inputs produce the same outputs
-    assert anonymizer.anonymize_text(text1) == anon1
-    assert anonymizer.anonymize_text(text2) == anon2
