@@ -176,7 +176,7 @@ class PostgreSQLAnonymizer:
                 FROM information_schema.columns 
                 WHERE table_name = %s
                 AND table_schema = 'public'
-                AND (data_type = 'text' OR (data_type = 'character varying' AND character_maximum_length > 100))
+                AND (data_type = 'text')
             """, (table_name,))
             
             text_columns = [row[0] for row in self.cursor.fetchall()]
