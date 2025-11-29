@@ -100,13 +100,13 @@ INSERT INTO support_tickets (ticket_subject, requester_nome, requester_correio, 
 CREATE TABLE IF NOT EXISTS projects (
     id SERIAL PRIMARY KEY,
     project_name VARCHAR(200),
-    project_owner VARCHAR(150),
+    owner_nombre VARCHAR(150),
     collaborator_emails TEXT,
     notes TEXT,
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-INSERT INTO projects (project_name, project_owner, collaborator_emails, notes) VALUES
+INSERT INTO projects (project_name, owner_nombre, collaborator_emails, notes) VALUES
     (
         'Website Redesign Q1 2025',
         'Rui Miguel Santos',

@@ -234,23 +234,9 @@ class Anonymizer:
             return text
         
         text_str = str(text)
-        
-        # Primeiro, anonimizar emails com regex
-        email_matches = []
-        for email_match in self.email_pattern.finditer(text_str):
-            email_matches.append((email_match.start(), email_match.end(), email_match.group()))
-        
-        # Processar emails de trás para frente para não quebrar offsets
         anonymized_text = text_str
-        for start, end, original_email in reversed(email_matches):
-            anonymized_email = self.anonymize_email(original_email)
-            anonymized_text = (
-                anonymized_text[:start] +
-                anonymized_email +
-                anonymized_text[end:]
-            )
         
-        # Usar regex para encontrar nomes (padrão de palavras capitalizadas)
+        # Primeiro, usar regex para encontrar nomes (padrão de palavras capitalizadas)
         name_pattern = re.compile(r'\b[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+(?:\s+[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+){1,3}\b')
         
         # Encontrar todos os potenciais nomes
@@ -268,6 +254,20 @@ class Anonymizer:
             anonymized_text = (
                 anonymized_text[:start] + 
                 anonymized_name + 
+                anonymized_text[end:]
+            )
+        
+        # Depois, anonimizar emails com regex
+        email_matches = []
+        for email_match in self.email_pattern.finditer(anonymized_text):
+            email_matches.append((email_match.start(), email_match.end(), email_match.group()))
+        
+        # Processar emails de trás para frente para não quebrar offsets
+        for start, end, original_email in reversed(email_matches):
+            anonymized_email = self.anonymize_email(original_email)
+            anonymized_text = (
+                anonymized_text[:start] +
+                anonymized_email +
                 anonymized_text[end:]
             )
         
