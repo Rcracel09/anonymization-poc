@@ -1,334 +1,140 @@
 """
-Enhanced anonymization logic with improved PII detection
-Melhorias:
-1. Detecção mais precisa com scoring system
-2. Melhor tratamento de edge cases
-3. Performance otimizada
-4. Validação de dados mais robusta
-5. Suporte a mais padrões de PII
+Enhanced anonymization logic with automatic detection of PII
+Uses spaCy + Faker + Regex to detect and anonymize emails and names
 """
 
 import spacy
 import re
 from faker import Faker
-from typing import Dict, Optional, List, Tuple, Set
-from collections import defaultdict
-import unicodedata
+from typing import Dict, Optional, List, Tuple
 
 class Anonymizer:
-    def __init__(self, locale: str = 'pt_PT', confidence_threshold: float = 0.6):
+    def __init__(self, locale: str = 'pt_PT'):
         """
         Inicializa o anonimizador com modelo spaCy português
-        
-        Args:
-            locale: Locale para Faker
-            confidence_threshold: Threshold de confiança para detecção (0.0 a 1.0)
         """
         print("📦 Carregando modelo spaCy português...")
         self.nlp = spacy.load("pt_core_news_lg")
         self.fake = Faker(locale)
-        self.confidence_threshold = confidence_threshold
         
-        # Dicionários para consistência
+        # Dicionário para consistência
         self.name_mapping: Dict[str, str] = {}
         self.email_mapping: Dict[str, str] = {}
         
-        # Estatísticas detalhadas
-        self.stats = defaultdict(int)
+        # Padrões regex para detecção
+        self.email_pattern = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
         
-        # Padrões regex otimizados
-        self.email_pattern = re.compile(
-            r'\b[A-Za-z0-9](?:[A-Za-z0-9._%+-]*[A-Za-z0-9])?@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Z|a-z]{2,}\b',
-            re.IGNORECASE
-        )
+        # Palavras-chave para identificar colunas de email
+        self.email_keywords = ['email', 'e-mail', 'mail', 'correo', 'correio']
         
-        # Padrão para nomes (2-5 palavras capitalizadas)
-        self.name_pattern = re.compile(
-            r'\b[A-ZÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ][a-záàâãäéèêëíìîïóòôõöúùûüç]{1,}(?:\s+(?:de|da|do|dos|das|e|van|von|del|della|di|O\'|Mc|Mac))?\s+[A-ZÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ][a-záàâãäéèêëíìîïóòôõöúùûüç]{1,}(?:\s+[A-ZÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ][a-záàâãäéèêëíìîïóòôõöúùûüç]{1,}){0,3}\b'
-        )
-        
-        # Keywords expandidas e ponderadas
-        self.email_keywords = {
-            # Peso alto (1.0)
-            'email': 1.0, 'e-mail': 1.0, 'mail': 0.9, 'correio': 1.0, 'correo': 0.9,
-            # Peso médio (0.7)
-            'contact_email': 1.0, 'work_email': 1.0, 'personal_email': 1.0,
-            'electronic_mail': 0.8,
-            # Peso baixo (0.5)
-            'contact': 0.5, 'contato': 0.5
-        }
-        
-        self.name_keywords = {
-            # Peso alto (1.0)
-            'name': 1.0, 'nome': 1.0, 'full_name': 1.0, 'fullname': 1.0,
-            'first_name': 1.0, 'last_name': 1.0, 'firstname': 1.0, 'lastname': 1.0,
-            # Peso médio-alto (0.8-0.9)
-            'author': 0.9, 'autor': 0.9, 'creator': 0.8, 'criador': 0.8,
-            'reviewer': 0.9, 'revisor': 0.9, 'approver': 0.8, 'aprovador': 0.8,
-            'owner': 0.7, 'proprietario': 0.7, 'responsible': 0.7, 'responsavel': 0.7,
-            # Peso médio (0.6-0.7)
-            'person': 0.7, 'pessoa': 0.7, 'contact': 0.6, 'contato': 0.6,
-            'client': 0.7, 'cliente': 0.7, 'customer': 0.7,
-            # Peso baixo (0.5)
-            'user': 0.5, 'usuario': 0.5, 'assigned': 0.5,
-            'member': 0.5, 'membro': 0.5, 'participant': 0.5
-        }
-        
-        # Keywords de exclusão (certamente NÃO são PII)
-        self.exclusion_keywords = {
-            'title', 'titulo', 'subject', 'assunto', 'product', 'produto',
-            'item', 'project', 'projeto', 'description', 'descricao',
-            'content', 'conteudo', 'text', 'texto', 'note', 'nota',
-            'observation', 'observacao', 'review', 'comment', 'comentario',
-            'message', 'mensagem', 'body', 'status', 'type', 'tipo',
-            'category', 'categoria', 'tag', 'label', 'etiqueta'
-        }
-        
-        # Palavras comuns (não são nomes)
-        self.common_words = self._load_common_words()
-        
-        # Cache para otimização
-        self._spacy_cache: Dict[str, bool] = {}
-    
-    def _load_common_words(self) -> Set[str]:
-        """
-        Carrega lista de palavras comuns que não são nomes
-        """
-        return {
-            # Artigos e conjunções
-            'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'by', 'with',
-            'o', 'a', 'os', 'as', 'um', 'uma', 'e', 'ou', 'mas', 'em', 'de', 'para',
-            # Tratamentos (podem aparecer mas não são nomes completos)
-            'mr', 'mrs', 'ms', 'dr', 'prof', 'sr', 'sra', 'dra',
-            # Contexto comum
-            'contact', 'email', 'phone', 'address', 'dear', 'hello', 'regards',
-            'contato', 'telefone', 'endereco', 'caro', 'ola', 'atenciosamente',
-            # Dias e meses
-            'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
-            'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'domingo',
-            'january', 'february', 'march', 'april', 'may', 'june', 'july',
-            'august', 'september', 'october', 'november', 'december',
-            'janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho', 'julho',
-            'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
-            # Empresas e lugares comuns
-            'company', 'corporation', 'limited', 'inc', 'ltd', 'group',
-            'empresa', 'sociedade', 'limitada', 'grupo',
-            'portugal', 'lisboa', 'porto', 'coimbra', 'brazil', 'brasil',
-            'user', 'customer', 'client', 'utilizador', 'cliente'
-        }
-    
-    def _normalize_text(self, text: str) -> str:
-        """
-        Normaliza texto removendo acentos para comparação
-        """
-        return ''.join(
-            c for c in unicodedata.normalize('NFD', text)
-            if unicodedata.category(c) != 'Mn'
-        ).lower()
-    
-    def _calculate_keyword_score(self, column_name: str, keywords: Dict[str, float]) -> float:
-        """
-        Calcula score baseado em keywords ponderadas
-        """
-        column_lower = self._normalize_text(column_name)
-        max_score = 0.0
-        
-        for keyword, weight in keywords.items():
-            if keyword in column_lower:
-                # Score mais alto se keyword está isolada
-                if column_lower == keyword:
-                    max_score = max(max_score, weight * 1.2)
-                # Score médio se keyword está no início ou fim
-                elif column_lower.startswith(keyword) or column_lower.endswith(keyword):
-                    max_score = max(max_score, weight * 1.1)
-                # Score normal se keyword está contida
-                else:
-                    max_score = max(max_score, weight)
-        
-        return min(max_score, 1.0)  # Cap em 1.0
-    
-    def _is_excluded_column(self, column_name: str) -> bool:
-        """
-        Verifica se coluna deve ser excluída da detecção
-        """
-        column_lower = self._normalize_text(column_name)
-        return any(excl in column_lower for excl in self.exclusion_keywords)
-    
-    def is_email_column(self, column_name: str, sample_values: List[str]) -> Tuple[bool, float]:
-        """
-        Detecta se uma coluna contém emails com score de confiança
-        
-        Returns:
-            (is_email, confidence_score)
-        """
-        # Verificar exclusão
-        if self._is_excluded_column(column_name):
-            return False, 0.0
-        
-        # Score baseado em keywords
-        keyword_score = self._calculate_keyword_score(column_name, self.email_keywords)
-        
-        # Se não há samples, usar apenas keyword
-        if not sample_values or len(sample_values) == 0:
-            return keyword_score >= self.confidence_threshold, keyword_score
-        
-        # Validar samples
-        valid_samples = [v for v in sample_values if v and isinstance(v, str) and len(str(v).strip()) > 0]
-        
-        if not valid_samples:
-            return keyword_score >= self.confidence_threshold, keyword_score
-        
-        # Score baseado em conteúdo
-        email_count = 0
-        for val in valid_samples:
-            val_str = str(val).strip()
-            # Email válido deve ter @ e domínio
-            if '@' in val_str and self.email_pattern.fullmatch(val_str):
-                email_count += 1
-        
-        content_score = email_count / len(valid_samples) if valid_samples else 0.0
-        
-        # Score final: média ponderada (keyword 40%, content 60%)
-        final_score = (keyword_score * 0.4) + (content_score * 0.6)
-        
-        self.stats['email_detection_attempts'] += 1
-        if final_score >= self.confidence_threshold:
-            self.stats['email_detection_success'] += 1
-        
-        return final_score >= self.confidence_threshold, final_score
-    
-    def is_name_column(self, column_name: str, sample_values: List[str]) -> Tuple[bool, float]:
-        """
-        Detecta se uma coluna contém nomes com score de confiança
-        
-        Returns:
-            (is_name, confidence_score)
-        """
-        # Verificar exclusão
-        if self._is_excluded_column(column_name):
-            return False, 0.0
-        
-        # Score baseado em keywords
-        keyword_score = self._calculate_keyword_score(column_name, self.name_keywords)
-        
-        # Se não há samples, usar apenas keyword
-        if not sample_values or len(sample_values) == 0:
-            return keyword_score >= self.confidence_threshold, keyword_score
-        
-        # Validar samples
-        valid_samples = [
-            v for v in sample_values 
-            if v and isinstance(v, str) and 3 <= len(str(v).strip()) <= 150
+        # Palavras-chave para identificar colunas de nome
+        self.name_keywords = [
+            'name', 'nome', 'namen', 'nombre',
+            'first_name', 'last_name', 'full_name',
+            'firstname', 'lastname', 'fullname',
+            'author', 'autor', 'creator', 'criador',
+            'owner', 'proprietario', 'user', 'usuario',
+            'reviewer', 'revisor', 'approver', 'aprovador',
+            'contact', 'contato', 'person', 'pessoa',
+            'client', 'cliente', 'customer', 'assigned'
         ]
+    
+    def is_email_column(self, column_name: str, sample_values: List[str]) -> bool:
+        """
+        Detecta se uma coluna contém emails
+        """
+        # Verificar nome da coluna
+        column_lower = column_name.lower()
+        if any(keyword in column_lower for keyword in self.email_keywords):
+            return True
         
-        if not valid_samples:
-            return keyword_score >= self.confidence_threshold, keyword_score
+        # Verificar valores de amostra
+        if sample_values:
+            email_count = sum(1 for val in sample_values if val and self.email_pattern.match(str(val)))
+            # Se >50% dos valores são emails, é uma coluna de email
+            return email_count / len(sample_values) > 0.5
         
-        # Análise de conteúdo
-        name_indicators = 0
-        sample_limit = min(len(valid_samples), 20)  # Limitar análise
+        return False
+    
+    def is_name_column(self, column_name: str, sample_values: List[str]) -> bool:
+        """
+        Detecta se uma coluna contém nomes de pessoas
+        """
+        # Verificar nome da coluna
+        column_lower = column_name.lower()
         
-        for val in valid_samples[:sample_limit]:
-            val_str = str(val).strip()
+        # Excluir colunas que claramente NÃO são nomes de pessoas
+        excluded_keywords = ['title', 'titulo', 'subject', 'assunto', 'product', 'produto', 
+                            'item', 'project', 'projeto', 'description', 'descricao',
+                            'content', 'conteudo', 'text', 'texto', 'note', 'nota',
+                            'observation', 'observacao', 'review']
+        
+        
+        if any(keyword in column_lower for keyword in excluded_keywords):
+            return False 
+        
+        # Verificar se contém keywords de nome
+        if any(keyword in column_lower for keyword in self.name_keywords):
+            return True
+        
+        # Usar spaCy para analisar valores de amostra
+        if sample_values:
+            person_count = 0
+            for val in sample_values[:10]:  # Limitar análise a 10 valores
+                if not val or not isinstance(val, str):
+                    continue
+                
+                # Se valor é muito longo (>150 chars), provavelmente não é só um nome
+                if len(val) > 150:
+                    continue
+                
+                doc = self.nlp(val.strip())
+                
+                # Verificar se o valor inteiro é uma entidade PERSON
+                if len(doc.ents) > 0:
+                    for ent in doc.ents:
+                        if ent.label_ == "PER":
+                            person_count += 1
+                            break
+                # Ou se contém palavras capitalizadas típicas de nomes
+                elif self._looks_like_name(val):
+                    person_count += 1
             
-            # Skip valores muito curtos ou muito longos
-            if len(val_str) < 3 or len(val_str) > 150:
-                continue
-            
-            # Método 1: Heurística rápida
-            if self._looks_like_name(val_str):
-                name_indicators += 1
-                continue
-            
-            # Método 2: spaCy (mais lento, usar com cache)
-            if self._is_person_entity(val_str):
-                name_indicators += 1
+            # Se >40% parecem nomes, é uma coluna de nome
+            return person_count / min(len(sample_values), 10) > 0.4
         
-        content_score = name_indicators / sample_limit if sample_limit > 0 else 0.0
-        
-        # Score final: média ponderada (keyword 35%, content 65%)
-        final_score = (keyword_score * 0.35) + (content_score * 0.65)
-        
-        self.stats['name_detection_attempts'] += 1
-        if final_score >= self.confidence_threshold:
-            self.stats['name_detection_success'] += 1
-        
-        return final_score >= self.confidence_threshold, final_score
+        return False   
     
     def _looks_like_name(self, text: str) -> bool:
         """
-        Heurística otimizada para verificar se texto parece um nome
+        Verifica se um texto parece um nome (heurística simples)
         """
-        if not text or len(text) < 3 or len(text) > 150:
+        if not text or len(text) < 3:
             return False
         
-        # Normalizar espaços
-        text = ' '.join(text.split())
+        # Se é muito longo, provavelmente não é apenas um nome
+        if len(text) > 150:
+            return False
+        
+        # Nome típico: 2-4 palavras capitalizadas
         words = text.split()
         
-        # Deve ter 2-5 palavras
-        if len(words) < 2 or len(words) > 5:
+        # Deve ter pelo menos 2 palavras para ser considerado um nome
+        if len(words) < 2:
+            return False
+            
+        if len(words) > 5:
             return False
         
-        # Contar palavras capitalizadas (excluindo conectores)
-        connectors = {'de', 'da', 'do', 'dos', 'das', 'e', 'van', 'von', 'del', 'della', 'di'}
-        capitalized = sum(
-            1 for w in words 
-            if w and w[0].isupper() and w.lower() not in connectors
-        )
+        capitalized_words = sum(1 for w in words if w and w[0].isupper())
         
-        # Verificar se não contém palavras comuns
-        normalized_words = [self._normalize_text(w) for w in words]
-        if any(w in self.common_words for w in normalized_words):
-            return False
-        
-        # Pelo menos 60% das palavras (exceto conectores) devem estar capitalizadas
-        non_connector_words = [w for w in words if w.lower() not in connectors]
-        if not non_connector_words:
-            return False
-        
-        cap_ratio = capitalized / len(non_connector_words)
-        
-        # Verificar se não contém números
-        has_numbers = any(char.isdigit() for char in text)
-        
-        # Verificar se não contém caracteres especiais (exceto acentos e hífen)
-        has_special = bool(re.search(r'[^a-zA-ZÀ-ÿ\s\'-]', text))
-        
-        return cap_ratio >= 0.6 and not has_numbers and not has_special
+        # Pelo menos 50% das palavras capitalizadas
+        return capitalized_words / len(words) >= 0.5
     
-    def _is_person_entity(self, text: str) -> bool:
-        """
-        Usa spaCy para verificar se é uma entidade PERSON (com cache)
-        """
-        # Verificar cache
-        if text in self._spacy_cache:
-            return self._spacy_cache[text]
-        
-        try:
-            doc = self.nlp(text)
-            is_person = any(ent.label_ == "PER" for ent in doc.ents)
-            
-            # Cachear resultado
-            self._spacy_cache[text] = is_person
-            
-            # Limitar tamanho do cache
-            if len(self._spacy_cache) > 1000:
-                # Remover 20% mais antigos
-                items_to_remove = list(self._spacy_cache.keys())[:200]
-                for key in items_to_remove:
-                    del self._spacy_cache[key]
-            
-            return is_person
-        except Exception:
-            return False
-    
-    def detect_pii_columns(self, column_samples: Dict[str, List[str]]) -> Dict[str, Tuple[str, float]]:
+    def detect_pii_columns(self, column_samples: Dict[str, List[str]]) -> Dict[str, str]:
         """
         Detecta automaticamente colunas com PII
-        
-        Returns:
-            {column_name: (pii_type, confidence_score)}
+        Retorna: {column_name: 'email' ou 'name'}
         """
         pii_columns = {}
         
@@ -341,204 +147,224 @@ class Anonymizer:
             if not sample_values:
                 continue
             
-            # Testar email primeiro (mais específico)
-            is_email, email_score = self.is_email_column(column_name, sample_values)
-            if is_email:
-                pii_columns[column_name] = ('email', email_score)
-                print(f"   ✓ {column_name} → EMAIL (confiança: {email_score:.2%})")
+            # Testar se é email
+            if self.is_email_column(column_name, sample_values):
+                pii_columns[column_name] = 'email'
+                print(f"   ✓ {column_name} → EMAIL")
                 continue
             
-            # Testar nome
-            is_name, name_score = self.is_name_column(column_name, sample_values)
-            if is_name:
-                pii_columns[column_name] = ('name', name_score)
-                print(f"   ✓ {column_name} → NAME (confiança: {name_score:.2%})")
+            # Testar se é nome
+            if self.is_name_column(column_name, sample_values):
+                pii_columns[column_name] = 'name'
+                print(f"   ✓ {column_name} → NAME")
                 continue
         
         return pii_columns
     
     def anonymize_name(self, original_name: str) -> str:
         """
-        Anonimiza um nome com validação aprimorada
+        Anonimiza um nome, mantendo consistência
         """
-        if not original_name:
+        if not original_name or str(original_name).strip() == "":
             return original_name
         
-        name_str = str(original_name).strip()
-        
-        if not name_str or len(name_str) < 2:
-            return original_name
-        
-        # Normalizar espaços
-        name_str = ' '.join(name_str.split())
+        name_str = str(original_name)
         
         if name_str not in self.name_mapping:
-            # Gerar nome fake
             self.name_mapping[name_str] = self.fake.name()
-            self.stats['unique_names_anonymized'] += 1
         
-        self.stats['total_name_operations'] += 1
         return self.name_mapping[name_str]
     
     def anonymize_email(self, original_email: str) -> str:
         """
-        Anonimiza email com validação e normalização aprimorada
+        Anonimiza um email, garantindo formato válido (sem espaços)
         """
         if not original_email or '@' not in str(original_email):
             return original_email
         
-        email_str = str(original_email).strip().lower()
-        
-        # Validar formato básico
-        if not self.email_pattern.fullmatch(email_str):
-            return original_email
+        email_str = str(original_email).strip()
         
         if email_str not in self.email_mapping:
             # Gerar email válido
             fake_email = self.fake.email()
             
-            # Garantir formato válido (sem acentos, espaços)
-            fake_email = self._sanitize_email(fake_email)
+            # Garantir que não há espaços, acentos ou caracteres especiais no email
+            # Remover espaços
+            fake_email = fake_email.replace(' ', '')
+            
+            # Remover acentos e caracteres especiais antes do @
+            if '@' in fake_email:
+                local_part, domain = fake_email.split('@', 1)
+                
+                # Substituir acentos e caracteres especiais
+                replacements = {
+                    'á': 'a', 'à': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a',
+                    'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
+                    'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
+                    'ó': 'o', 'ò': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o',
+                    'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
+                    'ç': 'c', 'ñ': 'n',
+                    'Á': 'A', 'À': 'A', 'Â': 'A', 'Ã': 'A', 'Ä': 'A',
+                    'É': 'E', 'È': 'E', 'Ê': 'E', 'Ë': 'E',
+                    'Í': 'I', 'Ì': 'I', 'Î': 'I', 'Ï': 'I',
+                    'Ó': 'O', 'Ò': 'O', 'Ô': 'O', 'Õ': 'O', 'Ö': 'O',
+                    'Ú': 'U', 'Ù': 'U', 'Û': 'U', 'Ü': 'U',
+                    'Ç': 'C', 'Ñ': 'N'
+                }
+                
+                for old_char, new_char in replacements.items():
+                    local_part = local_part.replace(old_char, new_char)
+                
+                # Remover hífens e tornar minúsculo
+                local_part = local_part.replace('-', '').lower()
+                
+                fake_email = f"{local_part}@{domain}"
             
             self.email_mapping[email_str] = fake_email
-            self.stats['unique_emails_anonymized'] += 1
         
-        self.stats['total_email_operations'] += 1
         return self.email_mapping[email_str]
-    
-    def _sanitize_email(self, email: str) -> str:
-        """
-        Remove caracteres inválidos de email
-        """
-        if '@' not in email:
-            return email
-        
-        local_part, domain = email.split('@', 1)
-        
-        # Substituir acentos
-        local_part = self._normalize_text(local_part)
-        
-        # Remover caracteres inválidos
-        local_part = re.sub(r'[^a-z0-9._+-]', '', local_part)
-        
-        # Garantir que não começa/termina com ponto
-        local_part = local_part.strip('.')
-        
-        return f"{local_part}@{domain}"
     
     def anonymize_text(self, text: str) -> str:
         """
-        Anonimiza PII em texto livre com melhor performance
+        Usa spaCy para detectar e anonimizar nomes e emails em texto livre
+        Preserva o contexto e estrutura do texto
         """
-        if not text or not isinstance(text, str):
+        if not text or str(text).strip() == "":
             return text
         
-        text_str = str(text).strip()
+        text_str = str(text)
         
-        if len(text_str) < 10:  # Muito curto para conter PII relevante
-            return text
-        
-        anonymized_text = text_str
-        replacements = []  # Lista de (start, end, original, replacement)
-        
-        # Fase 1: Detectar e coletar emails
+        # Primeiro, anonimizar emails com regex
+        email_matches = []
         for email_match in self.email_pattern.finditer(text_str):
-            original_email = email_match.group()
+            email_matches.append((email_match.start(), email_match.end(), email_match.group()))
+        
+        # Processar emails de trás para frente para não quebrar offsets
+        anonymized_text = text_str
+        for start, end, original_email in reversed(email_matches):
             anonymized_email = self.anonymize_email(original_email)
-            
-            if original_email != anonymized_email:
-                replacements.append((
-                    email_match.start(),
-                    email_match.end(),
-                    original_email,
-                    anonymized_email
-                ))
-        
-        # Fase 2: Detectar nomes com spaCy
-        try:
-            doc = self.nlp(text_str)
-            
-            for ent in doc.ents:
-                if ent.label_ != "PER":
-                    continue
-                
-                # Skip se overlap com email
-                overlaps = any(
-                    start <= ent.start_char < end or start < ent.end_char <= end
-                    for start, end, _, _ in replacements
-                )
-                if overlaps:
-                    continue
-                
-                original_name = ent.text
-                
-                # Validar se realmente parece nome
-                if not self._looks_like_name(original_name):
-                    continue
-                
-                anonymized_name = self.anonymize_name(original_name)
-                
-                if original_name != anonymized_name:
-                    replacements.append((
-                        ent.start_char,
-                        ent.end_char,
-                        original_name,
-                        anonymized_name
-                    ))
-        except Exception as e:
-            self.stats['spacy_errors'] += 1
-            # Continuar com replacements já coletados
-        
-        # Fase 3: Aplicar substituições de trás para frente
-        replacements.sort(key=lambda x: x[0], reverse=True)
-        
-        for start, end, original, replacement in replacements:
             anonymized_text = (
                 anonymized_text[:start] +
-                replacement +
+                anonymized_email +
                 anonymized_text[end:]
             )
-            self.stats['text_replacements'] += 1
+        
+        # Depois, usar spaCy para nomes
+        doc = self.nlp(anonymized_text)
+        
+        # Coletar nomes já detectados pelo spaCy
+        detected_names = set()
+        
+        # Processar entidades de trás para frente para não quebrar offsets
+        for ent in reversed(doc.ents):
+            if ent.label_ == "PER":  # Nome de pessoa
+                # IMPORTANTE: Ignorar entidades que contêm @ (email)
+                # spaCy às vezes detecta "Nome at email@domain.com" como uma única entidade
+                if '@' in ent.text:
+                    # Tentar extrair apenas o nome (antes de "at" ou "em")
+                    if ' at ' in ent.text:
+                        name_part = ent.text.split(' at ')[0].strip()
+                    elif ' em ' in ent.text:  # Português
+                        name_part = ent.text.split(' em ')[0].strip()
+                    else:
+                        # Fallback: pegar tudo antes do primeiro @
+                        name_part = ent.text.split('@')[0].strip()
+                        # Remover possível "at" ou "em" do final
+                        name_part = name_part.rstrip('at ').rstrip('em ').strip()
+                    
+                    if name_part and len(name_part) > 2:
+                        detected_names.add(name_part)
+                        anonymized_name = self.anonymize_name(name_part)
+                        
+                        # Calcular offsets corretos
+                        name_start = ent.start_char
+                        name_end = ent.start_char + len(name_part)
+                        
+                        anonymized_text = (
+                            anonymized_text[:name_start] +
+                            anonymized_name +
+                            anonymized_text[name_end:]
+                        )
+                    continue
+                
+                detected_names.add(ent.text)
+                original = ent.text
+                anonymized = self.anonymize_name(original)
+                
+                # Substituir no texto
+                start = ent.start_char
+                end = ent.end_char
+                anonymized_text = (
+                    anonymized_text[:start] + 
+                    anonymized + 
+                    anonymized_text[end:]
+                )
+        
+        # Fallback: usar regex para encontrar nomes que o spaCy perdeu
+        name_pattern = re.compile(r'\b[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+(?:\s+[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+){1,3}\b')
+        
+        # Encontrar todos os potenciais nomes
+        potential_names = []
+        for match in name_pattern.finditer(anonymized_text):
+            potential_name = match.group()
+            
+            # Só processar se spaCy não detectou, parece nome e não é palavra comum
+            if (potential_name not in detected_names and 
+                self._looks_like_name(potential_name) and
+                not self._is_common_word(potential_name)):
+                potential_names.append((match.start(), match.end(), potential_name))
+        
+        # Processar de trás para frente
+        for start, end, potential_name in reversed(potential_names):
+            anonymized_name = self.anonymize_name(potential_name)
+            anonymized_text = (
+                anonymized_text[:start] + 
+                anonymized_name + 
+                anonymized_text[end:]
+            )
         
         return anonymized_text
     
+    def _is_common_word(self, text: str) -> bool:
+        """
+        Verifica se é uma palavra comum (não é nome)
+        """
+        # Lista de palavras comuns que podem estar capitalizadas
+        common_words = {
+            # Artigos e preposições
+            'Article', 'The', 'And', 'Or', 'But', 'In', 'On', 'At', 'To', 'For', 'By', 'With',
+            # Contexto
+            'Contact', 'Email', 'Phone', 'Address', 'Dear', 'Hello', 'Regards', 'From',
+            'Mr', 'Mrs', 'Ms', 'Dr', 'Prof', 'Sir', 'Madam', 'User', 'Customer', 'Client',
+            # Dias e meses
+            'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+            'January', 'February', 'March', 'April', 'May', 'June', 'July', 
+            'August', 'September', 'October', 'November', 'December',
+            # Locais
+            'Portugal', 'Lisboa', 'Porto', 'Coimbra', 'Brazil', 'Brasília',
+            'Spain', 'Madrid', 'France', 'Paris', 'England', 'London',
+            # Línguas e outros
+            'English', 'Portuguese', 'Spanish', 'French',
+            'Company', 'Corporation', 'Limited', 'Inc', 'Ltd', 'Group'
+        }
+        
+        # Verificar se QUALQUER palavra é comum
+        words = text.split()
+        for word in words:
+            if word in common_words:
+                return True
+        
+        return False
+    
     def get_statistics(self) -> Dict:
         """
-        Retorna estatísticas detalhadas da anonimização
+        Retorna estatísticas da anonimização
         """
         return {
-            'detection': {
-                'email_attempts': self.stats.get('email_detection_attempts', 0),
-                'email_success': self.stats.get('email_detection_success', 0),
-                'name_attempts': self.stats.get('name_detection_attempts', 0),
-                'name_success': self.stats.get('name_detection_success', 0),
-            },
-            'anonymization': {
-                'unique_names': self.stats.get('unique_names_anonymized', 0),
-                'unique_emails': self.stats.get('unique_emails_anonymized', 0),
-                'total_name_ops': self.stats.get('total_name_operations', 0),
-                'total_email_ops': self.stats.get('total_email_operations', 0),
-                'text_replacements': self.stats.get('text_replacements', 0),
-            },
-            'errors': {
-                'spacy_errors': self.stats.get('spacy_errors', 0),
-            },
-            'mappings': {
-                'total_names_mapped': len(self.name_mapping),
-                'total_emails_mapped': len(self.email_mapping),
-            },
+            'total_names_anonymized': len(self.name_mapping),
+            'total_emails_anonymized': len(self.email_mapping),
             'sample_mappings': {
                 'names': dict(list(self.name_mapping.items())[:5]),
                 'emails': dict(list(self.email_mapping.items())[:3])
-            },
-            'cache': {
-                'spacy_cache_size': len(self._spacy_cache)
             }
         }
-    
-    def clear_cache(self):
-        """
-        Limpa caches para liberar memória
-        """
-        self._spacy_cache.clear()
-        self.stats['cache_clears'] = self.stats.get('cache_clears', 0) + 1
