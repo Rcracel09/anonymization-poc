@@ -236,7 +236,26 @@ class Anonymizer:
         text_str = str(text)
         anonymized_text = text_str
         
-        # Primeiro, usar regex para encontrar nomes (padrão de palavras capitalizadas)
+        # Primeiro, criar um mapa de todos os nomes já conhecidos dos campos estruturados
+        # para garantir consistência
+        known_names_in_text = []
+        for original_name in self.name_mapping.keys():
+            if original_name in anonymized_text:
+                # Encontrar todas as ocorrências deste nome conhecido
+                pattern = re.escape(original_name)
+                for match in re.finditer(pattern, anonymized_text):
+                    known_names_in_text.append((match.start(), match.end(), original_name))
+        
+        # Processar nomes conhecidos de trás para frente
+        for start, end, original_name in reversed(sorted(known_names_in_text)):
+            anonymized_name = self.name_mapping[original_name]
+            anonymized_text = (
+                anonymized_text[:start] + 
+                anonymized_name + 
+                anonymized_text[end:]
+            )
+        
+        # Depois, usar regex para encontrar nomes novos (padrão de palavras capitalizadas)
         name_pattern = re.compile(r'\b[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+(?:\s+[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+){1,3}\b')
         
         # Encontrar todos os potenciais nomes
@@ -257,7 +276,7 @@ class Anonymizer:
                 anonymized_text[end:]
             )
         
-        # Depois, anonimizar emails com regex
+        # Por último, anonimizar emails com regex
         email_matches = []
         for email_match in self.email_pattern.finditer(anonymized_text):
             email_matches.append((email_match.start(), email_match.end(), email_match.group()))
@@ -284,6 +303,7 @@ class Anonymizer:
             # Contexto
             'Contact', 'Email', 'Phone', 'Address', 'Dear', 'Hello', 'Regards', 'From',
             'Mr', 'Mrs', 'Ms', 'Dr', 'Prof', 'Sir', 'Madam', 'User', 'Customer', 'Client',
+            'Assigned', 'Support', 'Agent', 'Reported', 'Issues', 'Regarding', 'Contacted',
             # Dias e meses
             'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
             'January', 'February', 'March', 'April', 'May', 'June', 'July', 
@@ -296,11 +316,14 @@ class Anonymizer:
             'Company', 'Corporation', 'Limited', 'Inc', 'Ltd', 'Group'
         }
         
-        # Verificar se QUALQUER palavra é comum
+        # Verificar se TODAS as palavras do texto formam uma palavra comum
+        if text in common_words:
+            return True
+        
+        # Se é nome composto, verificar se primeira palavra é comum (ex: "User Luís")
         words = text.split()
-        for word in words:
-            if word in common_words:
-                return True
+        if len(words) > 1 and words[0] in common_words:
+            return True
         
         return False
     
