@@ -68,7 +68,7 @@ class Anonymizer:
                             'item', 'project', 'projeto', 'description', 'descricao',
                             'content', 'conteudo', 'text', 'texto', 'note', 'nota',
                             'observation', 'observacao', 'date', 'data', 'amount', 'quantia',
-                            'price', 'preco', 'value', 'valor', 'id', 'identifier', 'identificador']
+                            'price', 'preco', 'value', 'valor', 'id', 'identifier', 'identificador','observacoes']
         
         
         if any(keyword in column_lower for keyword in excluded_keywords):
