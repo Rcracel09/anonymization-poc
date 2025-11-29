@@ -286,52 +286,66 @@ class Anonymizer:
         
         phone_str = str(original_phone).strip()
         
+        # Validar se é um telefone válido (pelo menos 8 dígitos)
+        digits_only = re.sub(r'\D', '', phone_str)
+        if len(digits_only) < 8:
+            # Muito curto para ser um telefone, retornar como está
+            return phone_str
+        
         if phone_str not in self.phone_mapping:
             # Detectar formato do telefone original
             has_country_code = phone_str.startswith('+')
             has_spaces = ' ' in phone_str
             has_dashes = '-' in phone_str
-            not_spaces = not has_spaces and not has_dashes
+            has_parens = '(' in phone_str
             
             # Gerar número fake baseado no locale
             fake_phone = self.fake.phone_number()
             
             # Limpar caracteres especiais do fake phone
-            clean_fake = re.sub(r'[^\d+]', '', fake_phone)
+            clean_fake = re.sub(r'\D', '', fake_phone)
             
-            # Se o original não tem código de país, remover do fake
-            if not has_country_code and clean_fake.startswith('+'):
-                clean_fake = clean_fake[1:]
-                # Garantir que tem pelo menos 9 dígitos
-                while len(clean_fake) < 9:
-                    clean_fake += str(self.fake.random_digit())
+            # Garantir que temos dígitos suficientes
+            while len(clean_fake) < 9:
+                clean_fake += str(self.fake.random_digit())
             
             # Aplicar formatação similar ao original
-            if not_spaces:
-                # Formato simples sem espaços ou hífens: +351912345678 ou 912345678
-                formatted = clean_fake
-                
-            elif has_spaces:
-                # Formato com espaços: +351 912 345 678
-                if has_country_code:
+            if has_country_code:
+                # Original tem código de país
+                if not has_spaces and not has_dashes:
+                    # Formato: +351912345678
+                    formatted = f"+{clean_fake[:len(digits_only)]}"
+                elif has_spaces:
+                    # Formato: +351 912 345 678
                     if len(clean_fake) >= 12:
-                        formatted = f"+{clean_fake[:2]} {clean_fake[2:5]} {clean_fake[5:8]} {clean_fake[8:11]}"
+                        formatted = f"+{clean_fake[:3]} {clean_fake[3:6]} {clean_fake[6:9]} {clean_fake[9:12]}"
                     else:
-                        formatted = f"+{clean_fake[:2]} {clean_fake[2:]}"
+                        formatted = f"+{clean_fake[:3]} {clean_fake[3:]}"
+                elif has_dashes:
+                    # Formato: +351-912-345-678
+                    formatted = f"+{clean_fake[:3]}-{clean_fake[3:6]}-{clean_fake[6:9]}-{clean_fake[9:12]}"
                 else:
+                    formatted = f"+{clean_fake}"
+            else:
+                # Sem código de país
+                # Usar apenas os dígitos necessários
+                clean_fake = clean_fake[:len(digits_only)]
+                
+                if has_spaces:
+                    # Formato: 912 345 678
                     if len(clean_fake) >= 9:
                         formatted = f"{clean_fake[:3]} {clean_fake[3:6]} {clean_fake[6:9]}"
                     else:
                         formatted = clean_fake
-            elif has_dashes:
-                # Formato com hífens: 912-345-678
-                if len(clean_fake) >= 9:
-                    formatted = f"{clean_fake[:3]}-{clean_fake[3:6]}-{clean_fake[6:9]}"
+                elif has_dashes:
+                    # Formato: 912-345-678
+                    if len(clean_fake) >= 9:
+                        formatted = f"{clean_fake[:3]}-{clean_fake[3:6]}-{clean_fake[6:9]}"
+                    else:
+                        formatted = clean_fake
                 else:
+                    # Formato simples: 912345678
                     formatted = clean_fake
-            else:
-                # Sem formatação especial
-                formatted = clean_fake
             
             self.phone_mapping[phone_str] = formatted
         
@@ -362,7 +376,21 @@ class Anonymizer:
                 anonymized_text[end:]
             )
         
-        # 2. Processar nomes conhecidos dos campos estruturados
+        # 2. Processar emails (antes de nomes para evitar conflitos)
+        email_matches = []
+        for email_match in self.email_pattern.finditer(anonymized_text):
+            email_matches.append((email_match.start(), email_match.end(), email_match.group()))
+        
+        # Processar de trás para frente
+        for start, end, original_email in reversed(email_matches):
+            anonymized_email = self.anonymize_email(original_email)
+            anonymized_text = (
+                anonymized_text[:start] +
+                anonymized_email +
+                anonymized_text[end:]
+            )
+        
+        # 3. Processar nomes conhecidos dos campos estruturados
         known_names_in_text = []
         for original_name in self.name_mapping.keys():
             if original_name in anonymized_text:
@@ -379,7 +407,7 @@ class Anonymizer:
                 anonymized_text[end:]
             )
         
-        # 3. Detectar nomes novos com regex
+        # 4. Detectar nomes novos com regex (mais agressivo)
         name_pattern = re.compile(r'\b[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+(?:\s+[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+){1,3}\b')
         
         potential_names = []
@@ -395,20 +423,6 @@ class Anonymizer:
             anonymized_text = (
                 anonymized_text[:start] + 
                 anonymized_name + 
-                anonymized_text[end:]
-            )
-        
-        # 4. Processar emails por último
-        email_matches = []
-        for email_match in self.email_pattern.finditer(anonymized_text):
-            email_matches.append((email_match.start(), email_match.end(), email_match.group()))
-        
-        # Processar de trás para frente
-        for start, end, original_email in reversed(email_matches):
-            anonymized_email = self.anonymize_email(original_email)
-            anonymized_text = (
-                anonymized_text[:start] +
-                anonymized_email +
                 anonymized_text[end:]
             )
         
