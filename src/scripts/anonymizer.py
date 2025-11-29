@@ -227,7 +227,7 @@ class Anonymizer:
     
     def anonymize_text(self, text: str) -> str:
         """
-        Usa spaCy para detectar e anonimizar nomes e emails em texto livre
+        Detecta e anonimiza nomes e emails em texto livre usando regex
         Preserva o contexto e estrutura do texto
         """
         if not text or str(text).strip() == "":
@@ -250,58 +250,7 @@ class Anonymizer:
                 anonymized_text[end:]
             )
         
-        # Depois, usar spaCy para nomes
-        doc = self.nlp(anonymized_text)
-        
-        # Coletar nomes já detectados pelo spaCy
-        detected_names = set()
-        
-        # Processar entidades de trás para frente para não quebrar offsets
-        for ent in reversed(doc.ents):
-            if ent.label_ == "PER":  # Nome de pessoa
-                # IMPORTANTE: Ignorar entidades que contêm @ (email)
-                # spaCy às vezes detecta "Nome at email@domain.com" como uma única entidade
-                if '@' in ent.text:
-                    # Tentar extrair apenas o nome (antes de "at" ou "em")
-                    if ' at ' in ent.text:
-                        name_part = ent.text.split(' at ')[0].strip()
-                    elif ' em ' in ent.text:  # Português
-                        name_part = ent.text.split(' em ')[0].strip()
-                    else:
-                        # Fallback: pegar tudo antes do primeiro @
-                        name_part = ent.text.split('@')[0].strip()
-                        # Remover possível "at" ou "em" do final
-                        name_part = name_part.rstrip('at ').rstrip('em ').strip()
-                    
-                    if name_part and len(name_part) > 2:
-                        detected_names.add(name_part)
-                        anonymized_name = self.anonymize_name(name_part)
-                        
-                        # Calcular offsets corretos
-                        name_start = ent.start_char
-                        name_end = ent.start_char + len(name_part)
-                        
-                        anonymized_text = (
-                            anonymized_text[:name_start] +
-                            anonymized_name +
-                            anonymized_text[name_end:]
-                        )
-                    continue
-                
-                detected_names.add(ent.text)
-                original = ent.text
-                anonymized = self.anonymize_name(original)
-                
-                # Substituir no texto
-                start = ent.start_char
-                end = ent.end_char
-                anonymized_text = (
-                    anonymized_text[:start] + 
-                    anonymized + 
-                    anonymized_text[end:]
-                )
-        
-        # Fallback: usar regex para encontrar nomes que o spaCy perdeu
+        # Usar regex para encontrar nomes (padrão de palavras capitalizadas)
         name_pattern = re.compile(r'\b[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+(?:\s+[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+){1,3}\b')
         
         # Encontrar todos os potenciais nomes
@@ -309,13 +258,11 @@ class Anonymizer:
         for match in name_pattern.finditer(anonymized_text):
             potential_name = match.group()
             
-            # Só processar se spaCy não detectou, parece nome e não é palavra comum
-            if (potential_name not in detected_names and 
-                self._looks_like_name(potential_name) and
-                not self._is_common_word(potential_name)):
+            # Só processar se parece nome e não é palavra comum
+            if self._looks_like_name(potential_name) and not self._is_common_word(potential_name):
                 potential_names.append((match.start(), match.end(), potential_name))
         
-        # Processar de trás para frente
+        # Processar de trás para frente para não quebrar offsets
         for start, end, potential_name in reversed(potential_names):
             anonymized_name = self.anonymize_name(potential_name)
             anonymized_text = (
