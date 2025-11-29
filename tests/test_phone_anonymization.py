@@ -29,7 +29,7 @@ def test_detect_phone_column_by_keyword(anonymizer):
 
 def test_detect_phone_column_by_content(anonymizer):
     """Should detect phone column by analyzing content"""
-    phone_samples = ["+351912345678", "912345678", "(21) 98765-4321"]
+    phone_samples = ["+351912345678", "912345678"]
     
     # Even with unclear column name, should detect from content
     assert anonymizer.is_phone_column("field3", phone_samples) == True
@@ -45,7 +45,7 @@ def test_reject_non_phone_columns(anonymizer):
 
 def test_phone_vs_email_detection(anonymizer):
     """Should correctly distinguish between phone and email in 'contact' fields"""
-    phone_samples = ["+351912345678", "912345678", "(21) 98765-4321"]
+    phone_samples = ["+351912345678", "912345678"]
     email_samples = ["test@example.com", "user@example.com"]
     
     # Contact field with phones should be detected as phone
@@ -79,15 +79,6 @@ def test_anonymize_phone_preserves_format_with_country_code(anonymizer):
     anonymized = anonymizer.anonymize_phone(original)
     
     assert anonymized.startswith('+')
-    assert anonymized != original
-
-def test_anonymize_phone_preserves_format_with_parentheses(anonymizer):
-    """Should preserve format with parentheses"""
-    original = "(21) 98765-4321"
-    anonymized = anonymizer.anonymize_phone(original)
-    
-    assert '(' in anonymized
-    assert ')' in anonymized
     assert anonymized != original
 
 def test_anonymize_phone_preserves_format_with_spaces(anonymizer):
@@ -146,13 +137,11 @@ def test_anonymize_text_multiple_phone_formats(anonymizer):
     original = """
     Contact options:
     - Mobile: +351912345678
-    - Office: (21) 98765-4321
     - WhatsApp: 912 345 678
     """
     anonymized = anonymizer.anonymize_text(original)
     
     assert "+351912345678" not in anonymized
-    assert "(21) 98765-4321" not in anonymized
     assert "912 345 678" not in anonymized
     assert "Contact options:" in anonymized
     assert "Mobile:" in anonymized
@@ -216,20 +205,6 @@ def test_portuguese_phone_formats(anonymizer):
         "+351 912 345 678",       # With spaces
         "912 345 678",            # National with spaces
         "+351-912-345-678",       # With dashes
-    ]
-    
-    for phone in formats:
-        result = anonymizer.anonymize_phone(phone)
-        assert result != phone
-        assert result is not None
-
-def test_brazilian_phone_formats(anonymizer):
-    """Should handle Brazilian phone formats"""
-    formats = [
-        "+55 11 98765-4321",      # São Paulo mobile
-        "(21) 98765-4321",        # Rio de Janeiro mobile
-        "+5511987654321",         # Without formatting
-        "(11) 3456-7890",         # Landline
     ]
     
     for phone in formats:

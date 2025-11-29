@@ -88,8 +88,10 @@ def test_detect_pii_columns_mixed(anonymizer):
     assert "email" in pii_columns
     assert pii_columns["email"] == "email"
     
+    assert "phone" in pii_columns
+    assert pii_columns["phone"] == "phone"
+    
     # Should NOT detect these as PII
-    assert "phone" not in pii_columns
     assert "description" not in pii_columns
     assert "age" not in pii_columns
 

@@ -31,7 +31,8 @@ class Anonymizer:
             r'(?:\+\d{1,3}[\s-]?)?'  # Código país opcional: +351, +55
             r'(?:\(\d{2,3}\)[\s-]?)?'  # Código área com parênteses: (21), (11)
             r'(?:\d{2,3}[\s-]?)?'  # Código área sem parênteses: 21, 11
-            r'\d{3,4}[\s-]?\d{4}'  # Número principal: 98765-4321, 912345678
+            # Número principal: 912345678 , 933 456 789
+            r'\d{3}[\s-]?\d{3}[\s-]?\d{3}'
         )
         
         # Palavras-chave para identificar colunas de email
@@ -432,7 +433,7 @@ class Anonymizer:
             # Contexto
             'Contact', 'Email', 'Phone', 'Address', 'Dear', 'Hello', 'Regards', 'From',
             'Mr', 'Mrs', 'Ms', 'Dr', 'Prof', 'Sir', 'Madam', 'User', 'Customer', 'Client',
-            'Assigned', 'Support', 'Agent', 'Reported', 'Issues', 'Regarding', 'Contacted',
+            'Assigned', 'Support', 'Agent', 'Reported', 'Issues', 'Regarding', 'Contacted','Contact',
             # Dias e meses
             'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
             'January', 'February', 'March', 'April', 'May', 'June', 'July', 
