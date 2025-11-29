@@ -1,6 +1,6 @@
 """
 Enhanced anonymization logic with automatic detection of PII
-Uses spaCy + Faker + Regex to detect and anonymize emails and names
+Uses spaCy + Faker + Regex to detect and anonymize emails, names, and phone numbers
 """
 
 import spacy
@@ -20,12 +20,29 @@ class Anonymizer:
         # Dicionário para consistência
         self.name_mapping: Dict[str, str] = {}
         self.email_mapping: Dict[str, str] = {}
+        self.phone_mapping: Dict[str, str] = {}
         
         # Padrões regex para detecção
         self.email_pattern = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
         
+        # Padrão para telefones (suporta vários formatos internacionais)
+        # Exemplos: +351912345678, 912345678, (21) 98765-4321, +55 11 98765-4321
+        self.phone_pattern = re.compile(
+            r'(?:\+\d{1,3}[\s-]?)?'  # Código país opcional: +351, +55
+            r'(?:\(\d{2,3}\)[\s-]?)?'  # Código área com parênteses: (21), (11)
+            r'(?:\d{2,3}[\s-]?)?'  # Código área sem parênteses: 21, 11
+            r'\d{3,4}[\s-]?\d{4}'  # Número principal: 98765-4321, 912345678
+        )
+        
         # Palavras-chave para identificar colunas de email
         self.email_keywords = ['email', 'e-mail', 'mail', 'correo', 'correio']
+        
+        # Palavras-chave para identificar colunas de telefone
+        self.phone_keywords = [
+            'phone', 'telephone', 'telefone', 'tel', 'fone',
+            'mobile', 'cell', 'celular', 'movil', 'movel',
+            'whatsapp', 'numero', 'number'
+        ]
         
         # Palavras-chave para identificar colunas de nome
         self.name_keywords = [
@@ -56,6 +73,33 @@ class Anonymizer:
         
         return False
     
+    def is_phone_column(self, column_name: str, sample_values: List[str]) -> bool:
+        """
+        Detecta se uma coluna contém números de telefone
+        """
+        # Verificar nome da coluna
+        column_lower = column_name.lower()
+        if any(keyword in column_lower for keyword in self.phone_keywords):
+            # Verificar se não é email (algumas colunas podem ter "contact" no nome)
+            if not any(email_kw in column_lower for email_kw in self.email_keywords):
+                return True
+        
+        # Verificar valores de amostra
+        if sample_values:
+            phone_count = 0
+            for val in sample_values:
+                if not val:
+                    continue
+                val_str = str(val).strip()
+                # Verificar se parece um telefone e NÃO é email
+                if self.phone_pattern.search(val_str) and '@' not in val_str:
+                    phone_count += 1
+            
+            # Se >50% dos valores são telefones, é uma coluna de telefone
+            return phone_count / len(sample_values) > 0.5
+        
+        return False
+    
     def is_name_column(self, column_name: str, sample_values: List[str]) -> bool:
         """
         Detecta se uma coluna contém nomes de pessoas
@@ -68,7 +112,8 @@ class Anonymizer:
                             'item', 'project', 'projeto', 'description', 'descricao',
                             'content', 'conteudo', 'text', 'texto', 'note', 'nota',
                             'observation', 'observacao', 'date', 'data', 'amount', 'quantia',
-                            'price', 'preco', 'value', 'valor', 'id', 'identifier', 'identificador','observacoes']
+                            'price', 'preco', 'value', 'valor', 'id', 'identifier', 'identificador',
+                            'observacoes', 'phone', 'telephone', 'telefone', 'email']
         
         
         if any(keyword in column_lower for keyword in excluded_keywords):
@@ -135,7 +180,7 @@ class Anonymizer:
     def detect_pii_columns(self, column_samples: Dict[str, List[str]]) -> Dict[str, str]:
         """
         Detecta automaticamente colunas com PII
-        Retorna: {column_name: 'email' ou 'name'}
+        Retorna: {column_name: 'email' ou 'name' ou 'phone'}
         """
         pii_columns = {}
         
@@ -148,10 +193,16 @@ class Anonymizer:
             if not sample_values:
                 continue
             
-            # Testar se é email
+            # Testar se é email (primeiro, pois tem prioridade sobre phone em campos "contact")
             if self.is_email_column(column_name, sample_values):
                 pii_columns[column_name] = 'email'
                 print(f"   ✓ {column_name} → EMAIL")
+                continue
+            
+            # Testar se é telefone
+            if self.is_phone_column(column_name, sample_values):
+                pii_columns[column_name] = 'phone'
+                print(f"   ✓ {column_name} → PHONE")
                 continue
             
             # Testar se é nome
@@ -225,9 +276,77 @@ class Anonymizer:
         
         return self.email_mapping[email_str]
     
+    def anonymize_phone(self, original_phone: str) -> str:
+        """
+        Anonimiza um número de telefone, mantendo o formato similar ao original
+        """
+        if not original_phone:
+            return original_phone
+        
+        phone_str = str(original_phone).strip()
+        
+        if phone_str not in self.phone_mapping:
+            # Detectar formato do telefone original
+            has_country_code = phone_str.startswith('+')
+            has_parentheses = '(' in phone_str and ')' in phone_str
+            has_spaces = ' ' in phone_str
+            has_dashes = '-' in phone_str
+            
+            # Gerar número fake baseado no locale
+            fake_phone = self.fake.phone_number()
+            
+            # Limpar caracteres especiais do fake phone
+            clean_fake = re.sub(r'[^\d+]', '', fake_phone)
+            
+            # Se o original não tem código de país, remover do fake
+            if not has_country_code and clean_fake.startswith('+'):
+                clean_fake = clean_fake[1:]
+                # Garantir que tem pelo menos 9 dígitos
+                while len(clean_fake) < 9:
+                    clean_fake += str(self.fake.random_digit())
+            
+            # Aplicar formatação similar ao original
+            if has_parentheses:
+                # Formato: (XX) XXXXX-XXXX ou +XX (XX) XXXXX-XXXX
+                if has_country_code:
+                    if len(clean_fake) >= 12:
+                        formatted = f"+{clean_fake[:2]} ({clean_fake[2:4]}) {clean_fake[4:9]}-{clean_fake[9:13]}"
+                    else:
+                        formatted = f"+{clean_fake[:2]} ({clean_fake[2:4]}) {clean_fake[4:]}"
+                else:
+                    if len(clean_fake) >= 11:
+                        formatted = f"({clean_fake[:2]}) {clean_fake[2:7]}-{clean_fake[7:11]}"
+                    else:
+                        formatted = f"({clean_fake[:2]}) {clean_fake[2:]}"
+            elif has_spaces:
+                # Formato com espaços: +351 912 345 678
+                if has_country_code:
+                    if len(clean_fake) >= 12:
+                        formatted = f"+{clean_fake[:2]} {clean_fake[2:5]} {clean_fake[5:8]} {clean_fake[8:11]}"
+                    else:
+                        formatted = f"+{clean_fake[:2]} {clean_fake[2:]}"
+                else:
+                    if len(clean_fake) >= 9:
+                        formatted = f"{clean_fake[:3]} {clean_fake[3:6]} {clean_fake[6:9]}"
+                    else:
+                        formatted = clean_fake
+            elif has_dashes:
+                # Formato com hífens: 912-345-678
+                if len(clean_fake) >= 9:
+                    formatted = f"{clean_fake[:3]}-{clean_fake[3:6]}-{clean_fake[6:9]}"
+                else:
+                    formatted = clean_fake
+            else:
+                # Sem formatação especial
+                formatted = clean_fake
+            
+            self.phone_mapping[phone_str] = formatted
+        
+        return self.phone_mapping[phone_str]
+    
     def anonymize_text(self, text: str) -> str:
         """
-        Detecta e anonimiza nomes e emails em texto livre usando regex
+        Detecta e anonimiza nomes, emails e telefones em texto livre usando regex
         Preserva o contexto e estrutura do texto
         """
         if not text or str(text).strip() == "":
@@ -236,17 +355,29 @@ class Anonymizer:
         text_str = str(text)
         anonymized_text = text_str
         
-        # Primeiro, criar um mapa de todos os nomes já conhecidos dos campos estruturados
-        # para garantir consistência
+        # 1. Processar telefones PRIMEIRO (para evitar confusão com outros padrões)
+        phone_matches = []
+        for phone_match in self.phone_pattern.finditer(anonymized_text):
+            phone_matches.append((phone_match.start(), phone_match.end(), phone_match.group()))
+        
+        # Processar de trás para frente para não quebrar offsets
+        for start, end, original_phone in reversed(phone_matches):
+            anonymized_phone = self.anonymize_phone(original_phone)
+            anonymized_text = (
+                anonymized_text[:start] +
+                anonymized_phone +
+                anonymized_text[end:]
+            )
+        
+        # 2. Processar nomes conhecidos dos campos estruturados
         known_names_in_text = []
         for original_name in self.name_mapping.keys():
             if original_name in anonymized_text:
-                # Encontrar todas as ocorrências deste nome conhecido
                 pattern = re.escape(original_name)
                 for match in re.finditer(pattern, anonymized_text):
                     known_names_in_text.append((match.start(), match.end(), original_name))
         
-        # Processar nomes conhecidos de trás para frente
+        # Processar de trás para frente
         for start, end, original_name in reversed(sorted(known_names_in_text)):
             anonymized_name = self.name_mapping[original_name]
             anonymized_text = (
@@ -255,19 +386,17 @@ class Anonymizer:
                 anonymized_text[end:]
             )
         
-        # Depois, usar regex para encontrar nomes novos (padrão de palavras capitalizadas)
+        # 3. Detectar nomes novos com regex
         name_pattern = re.compile(r'\b[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+(?:\s+[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+){1,3}\b')
         
-        # Encontrar todos os potenciais nomes
         potential_names = []
         for match in name_pattern.finditer(anonymized_text):
             potential_name = match.group()
             
-            # Só processar se parece nome e não é palavra comum
             if self._looks_like_name(potential_name) and not self._is_common_word(potential_name):
                 potential_names.append((match.start(), match.end(), potential_name))
         
-        # Processar de trás para frente para não quebrar offsets
+        # Processar de trás para frente
         for start, end, potential_name in reversed(potential_names):
             anonymized_name = self.anonymize_name(potential_name)
             anonymized_text = (
@@ -276,12 +405,12 @@ class Anonymizer:
                 anonymized_text[end:]
             )
         
-        # Por último, anonimizar emails com regex
+        # 4. Processar emails por último
         email_matches = []
         for email_match in self.email_pattern.finditer(anonymized_text):
             email_matches.append((email_match.start(), email_match.end(), email_match.group()))
         
-        # Processar emails de trás para frente para não quebrar offsets
+        # Processar de trás para frente
         for start, end, original_email in reversed(email_matches):
             anonymized_email = self.anonymize_email(original_email)
             anonymized_text = (
@@ -334,8 +463,10 @@ class Anonymizer:
         return {
             'total_names_anonymized': len(self.name_mapping),
             'total_emails_anonymized': len(self.email_mapping),
+            'total_phones_anonymized': len(self.phone_mapping),
             'sample_mappings': {
                 'names': dict(list(self.name_mapping.items())[:5]),
-                'emails': dict(list(self.email_mapping.items())[:3])
+                'emails': dict(list(self.email_mapping.items())[:3]),
+                'phones': dict(list(self.phone_mapping.items())[:3])
             }
         }

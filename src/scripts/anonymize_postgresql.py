@@ -1,5 +1,5 @@
 """
-Enhanced PostgreSQL anonymization with automatic PII detection
+Enhanced PostgreSQL anonymization with automatic PII detection (including phone numbers)
 """
 
 import os
@@ -150,6 +150,8 @@ class PostgreSQLAnonymizer:
                     new_value = self.anonymizer.anonymize_name(original_value)
                 elif pii_type == 'email':
                     new_value = self.anonymizer.anonymize_email(original_value)
+                elif pii_type == 'phone':
+                    new_value = self.anonymizer.anonymize_phone(original_value)
                 else:
                     continue
             
@@ -195,7 +197,7 @@ class PostgreSQLAnonymizer:
     
     def _anonymize_text_column(self, table_name: str, column_name: str) -> int:
         """
-        Anonimiza nomes e emails encontrados em campos de texto livre
+        Anonimiza nomes, emails e telefones encontrados em campos de texto livre
         """
         self.cursor.execute(
             f"SELECT id, {column_name} FROM {table_name} WHERE {column_name} IS NOT NULL"
